@@ -165,6 +165,7 @@ private struct CaptureSettingsPane: View {
 
             Section {
                 Toggle("Include window shadow in window capture", isOn: $settings.captureWindowWithShadow)
+                Toggle("Show pointer in screenshots", isOn: $settings.captureShowCursor)
                 HStack {
                     Text("Save folder")
                     Spacer()

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = Updater.shared
         EmbeddedAIRegistrar.install()
+        ScreenCaptureService.shared.capturableOwnWindowIDs = { PinnedScreenshotManager.visibleWindowIDs }
         NSApp.setActivationPolicy(.accessory)
         SettingsOpener.installAccessoryRestoreOnClose()
         setupStatusItem()

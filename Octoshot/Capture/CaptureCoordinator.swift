@@ -93,7 +93,10 @@ final class CaptureCoordinator {
 
     private func performRegionCapture(_ rect: CGRect) async {
         do {
-            let image = try await ScreenCaptureService.shared.captureRegion(globalRect: rect)
+            let image = try await ScreenCaptureService.shared.captureRegion(
+                globalRect: rect,
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
             let anchor = CGPoint(x: rect.midX, y: rect.midY)
             await handleRegionCaptureResult(image, captureAnchor: anchor)
@@ -131,7 +134,11 @@ final class CaptureCoordinator {
     private func performWindowCapture(_ window: SCWindow) async {
         defer { isCapturing = false }
         do {
-            let image = try await ScreenCaptureService.shared.captureWindow(window)
+            let image = try await ScreenCaptureService.shared.captureWindow(
+                window,
+                includeShadow: AppSettings.shared.captureWindowWithShadow,
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
             let cocoa = DisplayGeometry.cocoaRect(fromTopLeftFrame: window.frame)
             let anchor = CGPoint(x: cocoa.midX, y: cocoa.midY)
@@ -147,10 +154,9 @@ final class CaptureCoordinator {
         defer { isCapturing = false }
         do {
             let mouse = NSEvent.mouseLocation
-            let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-            let content = try await ScreenCaptureService.shared.shareableContent()
-            let display = content.displays.first { $0.displayID == screen?.displayID } ?? content.displays.first
-            let image = try await ScreenCaptureService.shared.captureFullscreen(display: display)
+            let image = try await ScreenCaptureService.shared.captureFullscreen(
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
             let anchor = CGPoint(x: mouse.x, y: mouse.y)
             presentResult(image, captureAnchor: anchor)
