@@ -36,6 +36,10 @@ enum QuickAccessSnapshotHarness {
                        expanded: true, style: .bubbles, hoveredID: entries[1].id, canvasHeight: 700)
             try render(entries: entries, destination: destination.appendingPathComponent("v4-toolbar-B-collapsed.png"),
                        expanded: false, style: .bubbles, hoveredID: entries[0].id, canvasHeight: 700)
+            try render(entries: entries, destination: destination.appendingPathComponent("v5-toolbar-B.png"),
+                       expanded: true, style: .bubbles, hoveredID: entries[1].id, canvasHeight: 700)
+            try render(entries: entries, destination: destination.appendingPathComponent("v5-toolbar-B-collapsed.png"),
+                       expanded: false, style: .bubbles, hoveredID: entries[0].id, canvasHeight: 700)
             try FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
             for index in 0..<24 {
                 try render(entries: entries,

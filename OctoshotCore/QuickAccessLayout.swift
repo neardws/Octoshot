@@ -183,27 +183,15 @@ public enum QuickAccessLayout {
     public static func hoverFrames(sizes: [CGSize], expanded: Bool, placement: QuickAccessPlacement,
                                    hoveredIndex: Int?, style: QuickAccessToolbarStyle) -> [CGRect] {
         let cards = frames(sizes: sizes, expanded: expanded, placement: placement)
-        guard expanded, let hoveredIndex, cards.indices.contains(hoveredIndex) else {
+        guard style == .below, expanded, let hoveredIndex, cards.indices.contains(hoveredIndex) else {
             return cards
         }
         let card = cards[hoveredIndex]
         let toolbar = toolbarRects(for: card, style: style, placement: placement)
             .reduce(CGRect.null) { $0.union($1) }
-        if style == .below {
-            let shift = toolbar.maxY - card.maxY
-            return cards.enumerated().map { index, frame in
-                frame.offsetBy(dx: 0, dy: index >= hoveredIndex ? -shift : 0)
-            }
-        }
-        let above = max(0, card.minY - toolbar.minY)
-        let below = max(0, toolbar.maxY - card.maxY)
-        let olderShift = above + below
+        let shift = toolbar.maxY - card.maxY
         return cards.enumerated().map { index, frame in
-            let shift: CGFloat
-            if index > hoveredIndex { shift = -olderShift }
-            else if index == hoveredIndex { shift = -below }
-            else { shift = 0 }
-            return frame.offsetBy(dx: 0, dy: shift)
+            frame.offsetBy(dx: 0, dy: index >= hoveredIndex ? -shift : 0)
         }
     }
 
@@ -211,7 +199,7 @@ public enum QuickAccessLayout {
                                           placement: QuickAccessPlacement,
                                           style: QuickAccessToolbarStyle) -> CGSize {
         let base = contentSize(sizes: sizes, expanded: expanded, placement: placement)
-        guard !sizes.isEmpty else { return base }
+        guard style == .below, !sizes.isEmpty else { return base }
         var extraAbove: CGFloat = 0
         var extraBelow: CGFloat = 0
         let original = frames(sizes: sizes, expanded: expanded, placement: placement)
@@ -237,8 +225,7 @@ public enum QuickAccessLayout {
         let collapsedBase = contentSize(sizes: sizes, expanded: false, placement: placement)
         let expandedBase = contentSize(sizes: sizes, expanded: true, placement: placement)
         guard let front = frames(sizes: sizes, expanded: false, placement: placement).first else { return [] }
-        let bottomReserve = toolbarRects(for: front, style: style, placement: placement)
-            .map(\.maxY).max()! - front.maxY
+        let bottomReserve = style == .below ? belowToolbarFrame(for: front, placement: placement).maxY - front.maxY : 0
         return zip(collapsed, expanded).map { start, end in
             let startY = start.minY + canvasHeight - collapsedBase.height - bottomReserve
             let endY = end.minY + canvasHeight - expandedBase.height - bottomReserve
@@ -306,13 +293,13 @@ public enum QuickAccessLayout {
     }
 
     public static func toolbarContains(_ point: CGPoint, imageRect: CGRect,
-                                        style: QuickAccessToolbarStyle, placement: QuickAccessPlacement) -> Bool {
+                                        style: QuickAccessToolbarStyle, placement: QuickAccessPlacement,
+                                        visibleBounds: CGRect? = nil) -> Bool {
         if style == .below {
             return belowToolbarFrame(for: imageRect, placement: placement).insetBy(dx: 0, dy: -6).contains(point)
         }
-        let ring = QuickAccessRingGeometry(imageRect: imageRect)
-        return ring.segment(at: point) != nil ||
-            (!imageRect.contains(point) && ring.innerBounds.contains(point))
+        let ring = QuickAccessRingGeometry(imageRect: imageRect, visibleBounds: visibleBounds)
+        return ring.segment(at: point) != nil
     }
 
     public static func sampledFrames(sizes: [CGSize], placement: QuickAccessPlacement,
@@ -333,23 +320,39 @@ public enum QuickAccessLayout {
 }
 
 public struct QuickAccessRingGeometry {
-    public static let outerMargin: CGFloat = 36
-    public static let innerMargin: CGFloat = 4
+    public static let maximumDiameter: CGFloat = 170
+    public static let thickness: CGFloat = 36
     public let imageRect: CGRect
+    public let outerRadius: CGFloat
+    public var innerRadius: CGFloat { max(outerRadius - Self.thickness, outerRadius * 0.3) }
     public let segmentCount = 6
     public var segmentAngle: CGFloat { 2 * .pi / CGFloat(segmentCount) }
-    public var outerBounds: CGRect { imageRect.insetBy(dx: -Self.outerMargin, dy: -Self.outerMargin) }
-    public var innerBounds: CGRect { imageRect.insetBy(dx: -Self.innerMargin, dy: -Self.innerMargin) }
+    public var outerBounds: CGRect { bounds(radius: outerRadius) }
+    public var innerBounds: CGRect { bounds(radius: innerRadius) }
 
-    public init(imageRect: CGRect) { self.imageRect = imageRect }
+    public init(imageRect: CGRect, visibleBounds: CGRect? = nil) {
+        self.imageRect = imageRect
+        let desiredRadius = min(max(imageRect.width, imageRect.height), Self.maximumDiameter) / 2
+        if let visibleBounds {
+            outerRadius = max(0, min(desiredRadius, imageRect.midX - visibleBounds.minX,
+                visibleBounds.maxX - imageRect.midX, imageRect.midY - visibleBounds.minY,
+                visibleBounds.maxY - imageRect.midY))
+        } else {
+            outerRadius = max(0, desiredRadius)
+        }
+    }
+
+    private func bounds(radius: CGFloat) -> CGRect {
+        CGRect(x: imageRect.midX - radius, y: imageRect.midY - radius,
+               width: radius * 2, height: radius * 2)
+    }
 
     public func centerAngle(for index: Int) -> CGFloat {
         -.pi / 2 + CGFloat(index) * segmentAngle
     }
 
     public func point(at angle: CGFloat, on bounds: CGRect) -> CGPoint {
-        let radius = 1 / sqrt(pow(cos(angle) / (bounds.width / 2), 2) +
-                              pow(sin(angle) / (bounds.height / 2), 2))
+        let radius = bounds.width / 2
         return CGPoint(x: bounds.midX + cos(angle) * radius,
                        y: bounds.midY + sin(angle) * radius)
     }
@@ -364,10 +367,8 @@ public struct QuickAccessRingGeometry {
         guard point.x.isFinite, point.y.isFinite else { return nil }
         let horizontal = point.x - imageRect.midX
         let vertical = point.y - imageRect.midY
-        func ellipseValue(_ bounds: CGRect) -> CGFloat {
-            pow(horizontal / (bounds.width / 2), 2) + pow(vertical / (bounds.height / 2), 2)
-        }
-        guard ellipseValue(outerBounds) <= 1, ellipseValue(innerBounds) >= 1 else { return nil }
+        let distance = hypot(horizontal, vertical)
+        guard outerRadius > 0, distance <= outerRadius, distance >= innerRadius else { return nil }
         let angle = atan2(vertical, horizontal) + .pi / 2 + segmentAngle / 2
         let normalized = (angle.truncatingRemainder(dividingBy: 2 * .pi) + 2 * .pi)
             .truncatingRemainder(dividingBy: 2 * .pi)

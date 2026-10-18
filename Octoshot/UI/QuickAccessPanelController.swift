@@ -358,6 +358,7 @@ struct QuickAccessStackView: View {
     @State private var visualExpanded = false
     @State private var reservesExpandedSpace = false
     @State private var hoveredID: UUID?
+    @State private var canvasViewportOrigin: CGPoint = .zero
     @ObservedObject private var settings = AppSettings.shared
 #if DEBUG
     @Environment(\.quickAccessSnapshotState) private var snapshotState
@@ -412,6 +413,7 @@ struct QuickAccessStackView: View {
 
     var body: some View {
         viewport
+        .coordinateSpace(name: "quickAccessViewport")
         .task(id: targetExpanded) {
             onStackExpandedChange(stackPresentation.stack.isExpanded)
             hoveredID = nil
@@ -478,13 +480,14 @@ struct QuickAccessStackView: View {
                     onDragSucceeded: { onDismissEntry(entry.id) },
                     onThumbnailClick: { if !expanded { stackPresentation.expand() } },
                     showsActionsOnHover: expanded || index == 0,
-                    toolbarStyle: selectedToolbarStyle, isHovering: activeHover == entry.id
+                    toolbarStyle: selectedToolbarStyle, isHovering: activeHover == entry.id,
+                    viewportSize: visibleSize
                 )
                 .frame(width: sizes[index].width, height: sizes[index].height)
                 .scaleEffect(frame.width / sizes[index].width, anchor: .topLeading)
                 .offset(x: frame.minX, y: frame.minY)
                 .opacity(expanded || index < QuickAccessStackGeometry.maxCollapsedLayers ? 1 : 0)
-                .zIndex(activeHover == entry.id ? Double(entries.count + 1) : Double(entries.count - index))
+                .zIndex(activeHover == entry.id ? Double(entries.count + (selectedToolbarStyle == .bubbles ? 3 : 1)) : Double(entries.count - index))
                 .allowsHitTesting(expanded || index == 0)
                 .animation(reduceMotion || !animatesAppearance ? nil :
                     .spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.03), value: expanded)
@@ -494,11 +497,9 @@ struct QuickAccessStackView: View {
             if entries.count > 1 {
                 let top = frames.prefix(expanded ? entries.count : QuickAccessStackGeometry.maxCollapsedLayers)
                     .min { $0.minY < $1.minY } ?? .zero
-                let paletteTop = selectedToolbarStyle == .bubbles ? entries.firstIndex { $0.id == activeHover }
-                    .map { QuickAccessRingGeometry(imageRect: frames[$0]).outerBounds.minY } : nil
                 header
                     .frame(width: top.width, alignment: .trailing)
-                    .offset(x: top.minX, y: min(top.minY, paletteTop ?? top.minY) - 32)
+                    .offset(x: top.minX, y: top.minY - 32)
                     .zIndex(Double(entries.count + 2))
                     .animation(reduceMotion || !animatesAppearance ? nil :
                         .spring(response: 0.42, dampingFraction: 0.82).delay(Double(entries.count - 1) * 0.03), value: expanded)
@@ -507,6 +508,11 @@ struct QuickAccessStackView: View {
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height, alignment: .topLeading)
+        .onGeometryChange(for: CGPoint.self) { proxy in
+            proxy.frame(in: .named("quickAccessViewport")).origin
+        } action: { origin in
+            canvasViewportOrigin = origin
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             if !expanded { stackPresentation.expand() }
@@ -548,7 +554,9 @@ struct QuickAccessStackView: View {
                 hoveredIndex: nil, style: selectedToolbarStyle)[current]
             if frame.union(resting).contains(point) { return }
             if !frame.contains(point), QuickAccessLayout.toolbarContains(
-                point, imageRect: frame, style: selectedToolbarStyle, placement: placement
+                point, imageRect: frame, style: selectedToolbarStyle, placement: placement,
+                visibleBounds: CGRect(origin: .zero, size: visibleSize).insetBy(dx: 10, dy: 10)
+                    .offsetBy(dx: -canvasViewportOrigin.x, dy: -canvasViewportOrigin.y)
             ) { return }
         }
         hoveredID = eligible.first(where: { frames[$0].contains(point) }).map { entries[$0].id }
@@ -567,6 +575,7 @@ private struct QuickAccessCard: View {
     var showsActionsOnHover: Bool = true
     var toolbarStyle: QuickAccessToolbarStyle
     var isHovering: Bool
+    var viewportSize: CGSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.quickAccessDragOverlayEnabled) private var dragOverlayEnabled
@@ -575,7 +584,7 @@ private struct QuickAccessCard: View {
          onClose: @escaping () -> Void, onAlternateAction: @escaping () -> Void,
          onDragSucceeded: (() -> Void)? = nil, onThumbnailClick: (() -> Void)? = nil,
          showsActionsOnHover: Bool = true, toolbarStyle: QuickAccessToolbarStyle = .below,
-         isHovering: Bool = false) {
+         isHovering: Bool = false, viewportSize: CGSize) {
         self.entry = entry
         self.placement = placement
         self.speculativeState = entry.speculativeState
@@ -587,6 +596,7 @@ private struct QuickAccessCard: View {
         self.showsActionsOnHover = showsActionsOnHover
         self.toolbarStyle = toolbarStyle
         self.isHovering = isHovering
+        self.viewportSize = viewportSize
     }
 
     private var actions: [(symbol: String, label: String, action: () -> Void)] {
@@ -675,15 +685,21 @@ private struct QuickAccessCard: View {
             .accessibilityHidden(!isHovering)
             .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82), value: isHovering)
         } else {
-            let geometry = QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: thumbSize))
-            QuickAccessRingPalette(imageSize: thumbSize, actions: actions)
-            .frame(width: geometry.outerBounds.width, height: geometry.outerBounds.height)
-            .opacity(isHovering ? 1 : 0)
-            .scaleEffect(isHovering || reduceMotion ? 1 : 0.94)
-            .position(x: thumbSize.width / 2, y: thumbSize.height / 2)
-            .allowsHitTesting(isHovering)
-            .accessibilityHidden(!isHovering)
-            .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8), value: isHovering)
+            GeometryReader { proxy in
+                let cardFrame = proxy.frame(in: .named("quickAccessViewport"))
+                let bounds = CGRect(origin: .zero, size: viewportSize).insetBy(dx: 10, dy: 10)
+                    .offsetBy(dx: -cardFrame.minX, dy: -cardFrame.minY)
+                let geometry = QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: thumbSize),
+                                                       visibleBounds: bounds)
+                QuickAccessRingPalette(diameter: geometry.outerBounds.width, actions: actions)
+                    .frame(width: geometry.outerBounds.width, height: geometry.outerBounds.height)
+                    .opacity(isHovering ? 1 : 0)
+                    .scaleEffect(isHovering || reduceMotion ? 1 : 0.94)
+                    .position(x: thumbSize.width / 2, y: thumbSize.height / 2)
+                    .allowsHitTesting(isHovering)
+                    .accessibilityHidden(!isHovering)
+                    .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8), value: isHovering)
+            }
         }
     }
 
@@ -724,49 +740,41 @@ private struct QuickAccessRingShape: Shape {
     var segment: Int?
 
     func path(in rect: CGRect) -> Path {
-        let margin = QuickAccessRingGeometry.outerMargin
-        let geometry = QuickAccessRingGeometry(imageRect: rect.insetBy(dx: margin, dy: margin))
+        let geometry = QuickAccessRingGeometry(imageRect: rect)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let start = segment.map { geometry.centerAngle(for: $0) - geometry.segmentAngle / 2 } ?? 0
+        let end = start + (segment == nil ? 2 * .pi : geometry.segmentAngle)
         var path = Path()
-        if let segment {
-            let start = geometry.centerAngle(for: segment) - geometry.segmentAngle / 2
-            for step in 0...40 {
-                let angle = start + geometry.segmentAngle * CGFloat(step) / 40
-                let point = geometry.point(at: angle, on: geometry.outerBounds)
-                if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-            for step in (0...40).reversed() {
-                path.addLine(to: geometry.point(at: start + geometry.segmentAngle * CGFloat(step) / 40,
-                                               on: geometry.innerBounds))
-            }
-            path.closeSubpath()
+        path.addArc(center: center, radius: geometry.outerRadius,
+                    startAngle: .radians(Double(start)), endAngle: .radians(Double(end)), clockwise: false)
+        let innerEnd = geometry.point(at: end, on: geometry.innerBounds)
+        if segment != nil {
+            path.addLine(to: innerEnd)
         } else {
-            for (bounds, direction) in [(geometry.outerBounds, CGFloat(1)), (geometry.innerBounds, CGFloat(-1))] {
-                for step in 0...240 {
-                    let point = geometry.point(at: direction * 2 * .pi * CGFloat(step) / 240, on: bounds)
-                    if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
-                }
-                path.closeSubpath()
-            }
+            path.closeSubpath()
+            path.move(to: innerEnd)
         }
+        path.addArc(center: center, radius: geometry.innerRadius,
+                    startAngle: .radians(Double(end)), endAngle: .radians(Double(start)), clockwise: true)
+        path.closeSubpath()
         return path
     }
 }
 
 private struct QuickAccessRingPalette: View {
-    let imageSize: CGSize
+    let diameter: CGFloat
     let actions: [(symbol: String, label: String, action: () -> Void)]
     @State private var highlightedSegment: Int?
 
     private var geometry: QuickAccessRingGeometry {
-        let margin = QuickAccessRingGeometry.outerMargin
-        return QuickAccessRingGeometry(imageRect: CGRect(origin: CGPoint(x: margin, y: margin), size: imageSize))
+        QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter)))
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             QuickAccessRingShape()
-                .fill(.regularMaterial)
-                .opacity(0.86)
+                .fill(.ultraThinMaterial)
+                .opacity(0.72)
                 .overlay { QuickAccessRingShape().stroke(.white.opacity(0.42), lineWidth: 0.75) }
                 .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
             ForEach(actions.indices, id: \.self) { index in
