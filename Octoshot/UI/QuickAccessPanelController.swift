@@ -236,7 +236,7 @@ final class QuickAccessPanelController: NSObject {
 
     private static func clampedPanelSize(from fitting: CGSize, maxThumbWidth: CGFloat) -> NSSize {
         NSSize(
-            width: min(max(fitting.width, 160), maxThumbWidth + 56),
+            width: min(max(fitting.width, 120), maxThumbWidth + 64),
             height: fitting.height
         )
     }
@@ -363,17 +363,9 @@ private struct QuickAccessStackView: View {
             }
         }
         .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: useCollapsedStack)
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
-                .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-        }
+        // No outer container: thumbnails float directly on the desktop (Finder-stack style).
+        // The transparent padding only leaves room for card shadows and the 3D lift.
+        .padding(16)
         .scaleEffect(panelAppeared ? 1 : 0.94)
         .opacity(panelAppeared ? 1 : 0)
         .onAppear {
@@ -423,10 +415,24 @@ private struct QuickAccessStackView: View {
 
     @ViewBuilder
     private var stackHeader: some View {
-        HStack(spacing: 10) {
-            if placement == .bottomRight || placement == .rightSidebar {
-                Spacer(minLength: 0)
+        stackHeaderButtons
+            .padding(.horizontal, stackHeaderHasButtons ? 10 : 0)
+            .padding(.vertical, stackHeaderHasButtons ? 5 : 0)
+            .background {
+                if stackHeaderHasButtons {
+                    Capsule().fill(.regularMaterial)
+                        .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                }
             }
+    }
+
+    private var stackHeaderHasButtons: Bool {
+        stackPresentation.stack.isExpanded || isStackHovering || !useCollapsedStack
+    }
+
+    @ViewBuilder
+    private var stackHeaderButtons: some View {
+        HStack(spacing: 10) {
             if stackPresentation.stack.isExpanded {
                 Button(action: collapseStack) {
                     Label(OctoshotL10n.quickAccessCollapseStack, systemImage: "rectangle.arrowtriangle.2.inward")
@@ -444,9 +450,6 @@ private struct QuickAccessStackView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help(OctoshotL10n.quickAccessCloseAll)
-            }
-            if placement == .bottomLeft || placement == .leftSidebar {
-                Spacer(minLength: 0)
             }
         }
     }
@@ -765,10 +768,9 @@ private struct QuickAccessThumbnailChrome<Content: View>: View {
 
     var body: some View {
         content()
-            .background(Color.black.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
                             colors: [Color.white.opacity(0.42), Color.white.opacity(0.1)],
@@ -781,7 +783,7 @@ private struct QuickAccessThumbnailChrome<Content: View>: View {
             .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
             .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
             .rotation3DEffect(
-                .degrees(reduceMotion || !isHovering ? 0 : 5),
+                .degrees(reduceMotion ? 0 : (isHovering ? 5 : 1.5)),
                 axis: (x: -0.35, y: 1, z: 0),
                 perspective: 0.55
             )
