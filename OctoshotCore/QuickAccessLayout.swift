@@ -67,6 +67,50 @@ public enum QuickAccessScreenSelection {
     }
 }
 
+public struct QuickAccessPanelScreenTracker: Sendable {
+    public private(set) var displayID: UInt32?
+
+    public init() {}
+
+    @discardableResult
+    public mutating func screenForNewCapture(
+        screens: [QuickAccessScreenInfo],
+        capturePoint: CGPoint?,
+        mousePoint: CGPoint?
+    ) -> QuickAccessScreenInfo? {
+        let screen = QuickAccessScreenSelection.selectScreen(
+            screens: screens, capturePoint: capturePoint, mousePoint: mousePoint
+        )
+        displayID = screen?.displayID
+        return screen
+    }
+
+    public mutating func screenForReposition(screens: [QuickAccessScreenInfo]) -> QuickAccessScreenInfo? {
+        let screen = screens.first { $0.displayID == displayID } ?? screens.first
+        displayID = screen?.displayID
+        return screen
+    }
+}
+
+public enum QuickAccessThumbnailSizing {
+    /// Preserves aspect ratio and allows upscaling small images, matching the original thumbnail behavior.
+    public static func aspectFit(imageSize: CGSize, maxSize: CGSize) -> CGSize {
+        guard imageSize.width.isFinite, imageSize.height.isFinite,
+              maxSize.width.isFinite, maxSize.height.isFinite,
+              imageSize.width > 0, imageSize.height > 0,
+              maxSize.width > 0, maxSize.height > 0 else { return .zero }
+        let scale = min(maxSize.width / imageSize.width, maxSize.height / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+}
+
+public enum QuickAccessCaptureCoordinates {
+    /// Quartz global coordinates reflect around the primary display's top edge, not the desktop union.
+    public static func appKitPoint(fromQuartz point: CGPoint, primaryFrame: CGRect) -> CGPoint {
+        CGPoint(x: point.x, y: primaryFrame.maxY - point.y)
+    }
+}
+
 public enum QuickAccessPanelGeometry {
     /// AppKit global origin (bottom-left) for a borderless panel of `panelSize`.
     public static func panelOrigin(
@@ -118,6 +162,23 @@ public enum QuickAccessPanelGeometry {
 }
 
 public enum QuickAccessStackGeometry {
+    /// Individual card frames in SwiftUI coordinates, normalized to the full heterogeneous fan bounds.
+    public static func collapsedCardFrames(sizes: [CGSize], placement: QuickAccessPlacement) -> [CGRect] {
+        guard let front = sizes.first else { return [] }
+        let trailing = placement == .bottomRight || placement == .rightSidebar
+        let bottom = !placement.isSidebar
+        let frames = sizes.prefix(maxCollapsedLayers).enumerated().map { index, size in
+            let offset = collapsedOffset(index: index, total: sizes.count, placement: placement)
+            return CGRect(
+                x: (trailing ? front.width - size.width : 0) + offset.width,
+                y: (bottom ? front.height - size.height : 0) + offset.height,
+                width: size.width, height: size.height
+            )
+        }
+        let bounds = frames.reduce(CGRect.null) { $0.union($1) }
+        return frames.map { $0.offsetBy(dx: -bounds.minX, dy: -bounds.minY) }
+    }
+
     /// Maximum cards drawn in the collapsed stack peek.
     public static let maxCollapsedLayers = 5
 
