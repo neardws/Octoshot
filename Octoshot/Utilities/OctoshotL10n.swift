@@ -128,6 +128,10 @@ enum OctoshotL10n {
 
     // MARK: - Quick access panel
 
+    static var quickAccessToolbarTitle: String { String(localized: "Toolbar style") }
+    static var quickAccessToolbarBelow: String { String(localized: "Below image") }
+    static var quickAccessToolbarBubbles: String { String(localized: "Perimeter bubbles") }
+
     static var quickAccessCopy: String {
         String(localized: "Copy to Clipboard", comment: "Quick access: copy screenshot")
     }

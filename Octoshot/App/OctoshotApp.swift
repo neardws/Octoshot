@@ -2,14 +2,18 @@ import SwiftUI
 import OctoshotCore
 
 @main
-struct OctoshotApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    init() {
+enum OctoshotMain {
+    @MainActor
+    static func main() {
         #if DEBUG
         QuickAccessSnapshotHarness.runIfRequested()
         #endif
+        OctoshotApp.main()
     }
+}
+
+struct OctoshotApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         // Settings UI is hosted by `SettingsWindowController` (LSUIElement-safe).

@@ -78,7 +78,7 @@ public struct QuickAccessCaptureStack: Equatable, Sendable {
 }
 
 public enum QuickAccessStackPanelLayout {
-    public static let interCardSpacing: CGFloat = 10
+    public static let interCardSpacing: CGFloat = 12
     public static let outerPadding: CGFloat = 12
     /// Vertical space for the close-all / collapse row when more than one capture is shown.
     public static let multiCaptureHeaderHeight: CGFloat = 22
