@@ -174,6 +174,84 @@ public enum QuickAccessLayout {
     public static let headerHeight: CGFloat = 32
     public static let bubbleDiameter: CGFloat = 26
 
+    public static func toolbarRects(for rect: CGRect, style: QuickAccessToolbarStyle,
+                                    placement: QuickAccessPlacement) -> [CGRect] {
+        if style == .below { return [belowToolbarFrame(for: rect, placement: placement)] }
+        return bubblePositions(around: rect).map {
+            CGRect(x: $0.x - bubbleDiameter / 2, y: $0.y - bubbleDiameter / 2,
+                   width: bubbleDiameter, height: bubbleDiameter)
+        }
+    }
+
+    public static func hoverFrames(sizes: [CGSize], expanded: Bool, placement: QuickAccessPlacement,
+                                   hoveredIndex: Int?, style: QuickAccessToolbarStyle) -> [CGRect] {
+        let cards = frames(sizes: sizes, expanded: expanded, placement: placement)
+        guard expanded, let hoveredIndex, cards.indices.contains(hoveredIndex) else {
+            return cards
+        }
+        let card = cards[hoveredIndex]
+        let toolbar = toolbarRects(for: card, style: style, placement: placement)
+            .reduce(CGRect.null) { $0.union($1) }
+        if style == .below {
+            let shift = toolbar.maxY - card.maxY
+            return cards.enumerated().map { index, frame in
+                frame.offsetBy(dx: 0, dy: index >= hoveredIndex ? -shift : 0)
+            }
+        }
+        let above = max(0, card.minY - toolbar.minY)
+        let below = max(0, toolbar.maxY - card.maxY)
+        let olderShift = above + below
+        return cards.enumerated().map { index, frame in
+            let shift: CGFloat
+            if index > hoveredIndex { shift = -olderShift }
+            else if index == hoveredIndex { shift = -below }
+            else { shift = 0 }
+            return frame.offsetBy(dx: 0, dy: shift)
+        }
+    }
+
+    public static func reservedContentSize(sizes: [CGSize], expanded: Bool,
+                                          placement: QuickAccessPlacement,
+                                          style: QuickAccessToolbarStyle) -> CGSize {
+        let base = contentSize(sizes: sizes, expanded: expanded, placement: placement)
+        guard !sizes.isEmpty else { return base }
+        var extraAbove: CGFloat = 0
+        var extraBelow: CGFloat = 0
+        let original = frames(sizes: sizes, expanded: expanded, placement: placement)
+        let visibleCount = expanded ? sizes.count : min(sizes.count, QuickAccessStackGeometry.maxCollapsedLayers)
+        for hoveredIndex in (expanded ? Array(sizes.indices) : [0]) {
+            let cards = expanded ? hoverFrames(sizes: sizes, expanded: true, placement: placement,
+                                              hoveredIndex: hoveredIndex, style: style) : original
+            let bounds = (Array(cards.prefix(visibleCount)) +
+                toolbarRects(for: cards[hoveredIndex], style: style, placement: placement))
+                .reduce(CGRect.null) { $0.union($1) }
+            extraAbove = max(extraAbove, original.prefix(visibleCount).map(\.minY).min()! - bounds.minY)
+            extraBelow = max(extraBelow, bounds.maxY - original[0].maxY)
+        }
+        return CGSize(width: base.width, height: base.height + extraAbove + extraBelow)
+    }
+
+    public static func presentedFrames(sizes: [CGSize], placement: QuickAccessPlacement,
+                                       progress: CGFloat, canvasHeight: CGFloat,
+                                       hoveredIndex: Int?, style: QuickAccessToolbarStyle) -> [CGRect] {
+        let collapsed = frames(sizes: sizes, expanded: false, placement: placement)
+        let expanded = hoverFrames(sizes: sizes, expanded: true, placement: placement,
+                                   hoveredIndex: hoveredIndex, style: style)
+        let collapsedBase = contentSize(sizes: sizes, expanded: false, placement: placement)
+        let expandedBase = contentSize(sizes: sizes, expanded: true, placement: placement)
+        guard let front = frames(sizes: sizes, expanded: false, placement: placement).first else { return [] }
+        let bottomReserve = toolbarRects(for: front, style: style, placement: placement)
+            .map(\.maxY).max()! - front.maxY
+        return zip(collapsed, expanded).map { start, end in
+            let startY = start.minY + canvasHeight - collapsedBase.height - bottomReserve
+            let endY = end.minY + canvasHeight - expandedBase.height - bottomReserve
+            return CGRect(x: start.minX + (end.minX - start.minX) * progress,
+                          y: startY + (endY - startY) * progress,
+                          width: start.width + (end.width - start.width) * progress,
+                          height: start.height + (end.height - start.height) * progress)
+        }
+    }
+
     public static func frames(sizes: [CGSize], expanded: Bool, placement: QuickAccessPlacement) -> [CGRect] {
         guard let front = sizes.first else { return [] }
         let width = max(196, sizes.map(\.width).max() ?? 0)
@@ -233,8 +311,8 @@ public enum QuickAccessLayout {
             let horizontal = cos(angle)
             let vertical = sin(angle)
             let edge = 1 / max(abs(horizontal), abs(vertical))
-            return CGPoint(x: rect.midX + horizontal * edge * (rect.width / 2 + clearance),
-                           y: rect.midY + vertical * edge * (rect.height / 2 + clearance))
+            return CGPoint(x: rect.midX + horizontal * edge * max(30, rect.width / 2 + clearance),
+                           y: rect.midY + vertical * edge * max(30, rect.height / 2 + clearance))
         }
     }
 

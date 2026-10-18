@@ -22,9 +22,13 @@ enum QuickAccessSnapshotHarness {
             try render(entries: entries, destination: destination.appendingPathComponent("v3-collapsed.png"), expanded: false)
             try render(entries: entries, destination: destination.appendingPathComponent("v3-expanded.png"), expanded: true)
             try render(entries: entries, destination: destination.appendingPathComponent("v3-toolbar-A.png"),
-                       expanded: true, style: .below, hoveredID: entries[2].id)
+                       expanded: true, style: .below, hoveredID: entries[1].id)
             try render(entries: entries, destination: destination.appendingPathComponent("v3-toolbar-B.png"),
-                       expanded: true, style: .bubbles, hoveredID: entries[2].id)
+                       expanded: true, style: .bubbles, hoveredID: entries[1].id)
+            try render(entries: entries, destination: destination.appendingPathComponent("v3-toolbar-A-collapsed.png"),
+                       expanded: false, style: .below, hoveredID: entries[0].id)
+            try render(entries: entries, destination: destination.appendingPathComponent("v3-toolbar-B-collapsed.png"),
+                       expanded: false, style: .bubbles, hoveredID: entries[0].id)
             let frames = destination.appendingPathComponent("v3-expand-frames", isDirectory: true)
             try FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
             for index in 0..<24 {

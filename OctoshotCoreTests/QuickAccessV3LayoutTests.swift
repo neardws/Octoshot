@@ -6,6 +6,99 @@ final class QuickAccessV3LayoutTests: XCTestCase {
     private let sizes = [CGSize(width: 240, height: 72), CGSize(width: 540 / 7, height: 180),
                          CGSize(width: 240, height: 160)]
 
+    func testBelowHoverOpensToolbarHeightPlusSpacing() {
+        for placement in QuickAccessPlacement.allCases {
+            let resting = QuickAccessLayout.frames(sizes: sizes, expanded: true, placement: placement)
+            for hovered in sizes.indices {
+                let cards = QuickAccessLayout.hoverFrames(sizes: sizes, expanded: true, placement: placement,
+                    hoveredIndex: hovered, style: .below)
+                let toolbar = QuickAccessLayout.belowToolbarFrame(for: cards[hovered], placement: placement)
+                XCTAssertEqual(resting[hovered].minY - cards[hovered].minY, toolbar.height + 6, accuracy: 0.001)
+                for index in sizes.indices {
+                    XCTAssertEqual(cards[index].minY, resting[index].minY - (index >= hovered ? 42 : 0), accuracy: 0.001)
+                    if index != hovered { XCTAssertFalse(toolbar.intersects(cards[index])) }
+                }
+                if hovered > 0 {
+                    XCTAssertEqual(cards[hovered - 1].minY - cards[hovered].maxY,
+                                   QuickAccessLayout.gap + toolbar.height + 6, accuracy: 0.001)
+                }
+            }
+        }
+    }
+
+    func testBubbleHoverNeverIntersectsAnotherCardOrBubble() {
+        for placement in QuickAccessPlacement.allCases {
+            for expanded in [false, true] {
+                for hovered in (expanded ? Array(sizes.indices) : [0]) {
+                    let cards = QuickAccessLayout.hoverFrames(sizes: sizes, expanded: expanded, placement: placement,
+                        hoveredIndex: hovered, style: .bubbles)
+                    let bubbles = QuickAccessLayout.toolbarRects(for: cards[hovered], style: .bubbles, placement: placement)
+                    for bubbleIndex in bubbles.indices {
+                        for (index, card) in cards.enumerated() where expanded || index == hovered {
+                            XCTAssertFalse(bubbles[bubbleIndex].intersects(card))
+                        }
+                        for other in bubbles.indices where other != bubbleIndex {
+                            XCTAssertFalse(bubbles[bubbleIndex].intersects(bubbles[other]))
+                        }
+                    }
+                }
+            }
+        }
+        for size in [CGSize(width: 1, height: 1), CGSize(width: 1, height: 180), CGSize(width: 240, height: 1)] {
+            let bubbles = QuickAccessLayout.toolbarRects(for: CGRect(origin: .zero, size: size),
+                style: .bubbles, placement: .bottomRight)
+            for index in bubbles.indices {
+                for other in bubbles.indices where index != other { XCTAssertFalse(bubbles[index].intersects(bubbles[other])) }
+            }
+        }
+    }
+
+    func testCollapsedPresentedFramesAreUnchangedByHover() {
+        for placement in QuickAccessPlacement.allCases {
+            for style in QuickAccessToolbarStyle.allCases {
+                for cards in [sizes, [sizes[0]], Array(repeating: sizes[2], count: 6)] {
+                    let reserved = QuickAccessLayout.reservedContentSize(sizes: cards, expanded: false,
+                        placement: placement, style: style)
+                    let resting = QuickAccessLayout.presentedFrames(sizes: cards, placement: placement,
+                        progress: 0, canvasHeight: reserved.height, hoveredIndex: nil, style: style)
+                    for hovered in cards.indices {
+                        XCTAssertEqual(QuickAccessLayout.presentedFrames(sizes: cards, placement: placement,
+                            progress: 0, canvasHeight: reserved.height, hoveredIndex: hovered, style: style), resting)
+                        XCTAssertEqual(QuickAccessLayout.hoverFrames(sizes: cards, expanded: false,
+                            placement: placement, hoveredIndex: hovered, style: style),
+                            QuickAccessLayout.frames(sizes: cards, expanded: false, placement: placement))
+                    }
+                }
+            }
+        }
+    }
+
+    func testRestingLayoutIsUnchangedAndReservationContainsEveryHover() {
+        for placement in QuickAccessPlacement.allCases {
+            for expanded in [false, true] {
+                for style in QuickAccessToolbarStyle.allCases {
+                    XCTAssertEqual(QuickAccessLayout.hoverFrames(sizes: sizes, expanded: expanded, placement: placement,
+                        hoveredIndex: nil, style: style),
+                        QuickAccessLayout.frames(sizes: sizes, expanded: expanded, placement: placement))
+                    let reserved = QuickAccessLayout.reservedContentSize(sizes: sizes, expanded: expanded,
+                        placement: placement, style: style)
+                    let bounds = CGRect(origin: .zero, size: reserved)
+                    for hovered in (expanded ? Array(sizes.indices) : [0]) {
+                        let cards = QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+                            progress: expanded ? 1 : 0, canvasHeight: reserved.height,
+                            hoveredIndex: hovered, style: style)
+                        let visible = Array(cards.prefix(expanded ? cards.count : QuickAccessStackGeometry.maxCollapsedLayers))
+                        let rects = visible + QuickAccessLayout.toolbarRects(for: cards[hovered], style: style, placement: placement)
+                        for rect in rects { XCTAssertTrue(bounds.contains(rect), "\(style) \(expanded) \(hovered): \(rect) outside \(bounds)") }
+                        let extent = rects.reduce(CGRect.null) { $0.union($1) }
+                        XCTAssertGreaterThanOrEqual(reserved.height + 0.001,
+                            extent.height + QuickAccessLayout.padding * 2 + QuickAccessLayout.headerHeight)
+                    }
+                }
+            }
+        }
+    }
+
     func testExpandedOrderAndTwelvePointGapsForEveryPlacement() {
         for placement in QuickAccessPlacement.allCases {
             let frames = QuickAccessLayout.frames(sizes: sizes, expanded: true, placement: placement)

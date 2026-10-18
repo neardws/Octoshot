@@ -375,9 +375,15 @@ struct QuickAccessStackView: View {
     }
     private var canvasSize: CGSize {
         if reservesExpandedSpace || expanded {
-            return QuickAccessLayout.transitionSize(sizes: sizes, placement: placement)
+            let collapsed = reservedSize(expanded: false)
+            let expanded = reservedSize(expanded: true)
+            return CGSize(width: max(collapsed.width, expanded.width), height: max(collapsed.height, expanded.height))
         }
-        return QuickAccessLayout.contentSize(sizes: sizes, expanded: false, placement: placement)
+        return reservedSize(expanded: false)
+    }
+    private func reservedSize(expanded: Bool) -> CGSize {
+        QuickAccessLayout.reservedContentSize(sizes: sizes, expanded: expanded,
+                                              placement: placement, style: selectedToolbarStyle)
     }
     private var visibleSize: CGSize {
         CGSize(width: canvasSize.width, height: min(canvasSize.height, maxExpandedHeight))
@@ -385,12 +391,17 @@ struct QuickAccessStackView: View {
     private var frames: [CGRect] {
 #if DEBUG
         if let progress = snapshotState.progress {
-            return QuickAccessLayout.sampledFrames(sizes: sizes, placement: placement,
-                                                    time: progress, canvasHeight: canvasSize.height)
+            return sizes.indices.map { index in
+                let time = min(1, max(0, (progress * 0.85 - CGFloat(index) * 0.03) / 0.65))
+                return QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+                    progress: QuickAccessLayout.springProgress(time), canvasHeight: canvasSize.height,
+                    hoveredIndex: entries.firstIndex { $0.id == activeHover }, style: selectedToolbarStyle)[index]
+            }
         }
 #endif
-        return QuickAccessLayout.interpolatedFrames(sizes: sizes, placement: placement,
-                                                    progress: expanded ? 1 : 0, canvasHeight: canvasSize.height)
+        return QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+            progress: expanded ? 1 : 0, canvasHeight: canvasSize.height,
+            hoveredIndex: entries.firstIndex { $0.id == activeHover }, style: selectedToolbarStyle)
     }
     private var activeHover: UUID? {
 #if DEBUG
@@ -412,7 +423,9 @@ struct QuickAccessStackView: View {
             }
             if targetExpanded {
                 reservesExpandedSpace = true
-                let union = QuickAccessLayout.transitionSize(sizes: sizes, placement: placement)
+                let collapsed = reservedSize(expanded: false)
+                let expanded = reservedSize(expanded: true)
+                let union = CGSize(width: max(collapsed.width, expanded.width), height: max(collapsed.height, expanded.height))
                 onContentSizeChange(CGSize(width: union.width, height: min(union.height, maxExpandedHeight)))
                 try? await Task.sleep(for: .milliseconds(20))
                 guard !Task.isCancelled else { return }
@@ -475,11 +488,20 @@ struct QuickAccessStackView: View {
                 .allowsHitTesting(expanded || index == 0)
                 .animation(reduceMotion || !animatesAppearance ? nil :
                     .spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.03), value: expanded)
+                .animation(reduceMotion || !animatesAppearance ? nil :
+                    .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
             }
             if entries.count > 1 {
+                let top = frames.prefix(expanded ? entries.count : QuickAccessStackGeometry.maxCollapsedLayers)
+                    .min { $0.minY < $1.minY } ?? .zero
                 header
-                    .frame(width: canvasSize.width - QuickAccessLayout.padding * 2, alignment: .trailing)
-                    .offset(x: QuickAccessLayout.padding, y: QuickAccessLayout.padding - 32)
+                    .frame(width: top.width, alignment: .trailing)
+                    .offset(x: top.minX, y: top.minY - 32)
+                    .zIndex(Double(entries.count + 2))
+                    .animation(reduceMotion || !animatesAppearance ? nil :
+                        .spring(response: 0.42, dampingFraction: 0.82).delay(Double(entries.count - 1) * 0.03), value: expanded)
+                    .animation(reduceMotion || !animatesAppearance ? nil :
+                        .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height, alignment: .topLeading)
@@ -519,6 +541,10 @@ struct QuickAccessStackView: View {
         let eligible = expanded ? Array(entries.indices) : Array(entries.indices.prefix(1))
         if let current = eligible.first(where: { entries[$0].id == hoveredID }) {
             let frame = frames[current]
+            let resting = QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+                progress: expanded ? 1 : 0, canvasHeight: canvasSize.height,
+                hoveredIndex: nil, style: selectedToolbarStyle)[current]
+            if frame.union(resting).contains(point) { return }
             if !frame.contains(point), QuickAccessLayout.toolbarContains(
                 point, imageRect: frame, style: selectedToolbarStyle, placement: placement
             ) { return }
