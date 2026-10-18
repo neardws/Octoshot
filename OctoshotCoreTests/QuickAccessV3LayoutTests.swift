@@ -26,29 +26,17 @@ final class QuickAccessV3LayoutTests: XCTestCase {
         }
     }
 
-    func testBubbleHoverNeverIntersectsAnotherCardOrBubble() {
+    func testExpandedRingNeverIntersectsAnotherCard() {
         for placement in QuickAccessPlacement.allCases {
-            for expanded in [false, true] {
-                for hovered in (expanded ? Array(sizes.indices) : [0]) {
-                    let cards = QuickAccessLayout.hoverFrames(sizes: sizes, expanded: expanded, placement: placement,
+            for cardSizes in [sizes, Array(repeating: CGSize(width: 240, height: 180), count: 4)] {
+                for hovered in cardSizes.indices {
+                    let cards = QuickAccessLayout.hoverFrames(sizes: cardSizes, expanded: true, placement: placement,
                         hoveredIndex: hovered, style: .bubbles)
-                    let bubbles = QuickAccessLayout.toolbarRects(for: cards[hovered], style: .bubbles, placement: placement)
-                    for bubbleIndex in bubbles.indices {
-                        for (index, card) in cards.enumerated() where expanded || index == hovered {
-                            XCTAssertFalse(bubbles[bubbleIndex].intersects(card))
-                        }
-                        for other in bubbles.indices where other != bubbleIndex {
-                            XCTAssertFalse(bubbles[bubbleIndex].intersects(bubbles[other]))
-                        }
+                    let ring = QuickAccessRingGeometry(imageRect: cards[hovered])
+                    for (index, card) in cards.enumerated() where index != hovered {
+                        XCTAssertFalse(ring.outerBounds.intersects(card))
                     }
                 }
-            }
-        }
-        for size in [CGSize(width: 1, height: 1), CGSize(width: 1, height: 180), CGSize(width: 240, height: 1)] {
-            let bubbles = QuickAccessLayout.toolbarRects(for: CGRect(origin: .zero, size: size),
-                style: .bubbles, placement: .bottomRight)
-            for index in bubbles.indices {
-                for other in bubbles.indices where index != other { XCTAssertFalse(bubbles[index].intersects(bubbles[other])) }
             }
         }
     }
@@ -189,22 +177,29 @@ final class QuickAccessV3LayoutTests: XCTestCase {
         XCTAssertEqual(QuickAccessLayout.springProgress(1), 1)
     }
 
-    func testBubbleRingIsSymmetricOutsideImageAndWithinReservedPadding() {
-        for size in sizes + [CGSize(width: 240, height: 1), CGSize(width: 1, height: 180)] {
+    func testRingHasSixEqualAngularSlotsOutsideImageCenterWithinPadding() {
+        for size in sizes + [CGSize(width: 240, height: 180), CGSize(width: 240, height: 1), CGSize(width: 1, height: 180)] {
             let rect = CGRect(origin: CGPoint(x: 44, y: 44), size: size)
-            let positions = QuickAccessLayout.bubblePositions(around: rect)
-            XCTAssertEqual(positions.count, 6)
-            for index in positions.indices {
-                let point = positions[index]
-                let bubble = CGRect(x: point.x - 13, y: point.y - 13, width: 26, height: 26)
-                XCTAssertFalse(rect.intersects(bubble))
-                XCTAssertTrue(rect.insetBy(dx: -44, dy: -44).contains(bubble))
-                XCTAssertEqual(point.x + positions[(index + 3) % 6].x, rect.midX * 2, accuracy: 0.001)
-                XCTAssertEqual(point.y + positions[(index + 3) % 6].y, rect.midY * 2, accuracy: 0.001)
+            let ring = QuickAccessRingGeometry(imageRect: rect)
+            XCTAssertEqual(ring.segmentCount, 6)
+            XCTAssertTrue(rect.insetBy(dx: -44, dy: -44).contains(ring.outerBounds))
+            let centralArea = rect.insetBy(dx: rect.width * 0.2, dy: rect.height * 0.2)
+            for horizontal in [centralArea.minX, centralArea.midX, centralArea.maxX] {
+                for vertical in [centralArea.minY, centralArea.midY, centralArea.maxY] {
+                    XCTAssertNil(ring.segment(at: CGPoint(x: horizontal, y: vertical)))
+                }
+            }
+            for index in 0..<ring.segmentCount {
+                let point = ring.center(for: index)
+                XCTAssertFalse(rect.insetBy(dx: rect.width * 0.2, dy: rect.height * 0.2).contains(point))
+                XCTAssertTrue(ring.outerBounds.contains(point))
+                XCTAssertEqual(ring.segment(at: point), index)
+                XCTAssertEqual(ring.centerAngle(for: index + 1) - ring.centerAngle(for: index),
+                               .pi / 3, accuracy: 0.001)
+                XCTAssertEqual(point.x + ring.center(for: (index + 3) % 6).x, rect.midX * 2, accuracy: 0.001)
+                XCTAssertEqual(point.y + ring.center(for: (index + 3) % 6).y, rect.midY * 2, accuracy: 0.001)
             }
         }
-        XCTAssertTrue(QuickAccessLayout.bubblePositions(around: .zero, count: 0).isEmpty)
-        XCTAssertEqual(QuickAccessLayout.bubblePositions(around: .zero, count: 8).count, 8)
     }
 
     func testBelowToolbarFitsPanelEvenForTallNarrowCard() {
@@ -227,13 +222,38 @@ final class QuickAccessV3LayoutTests: XCTestCase {
         let toolbar = QuickAccessLayout.belowToolbarFrame(for: frame, placement: .bottomRight)
         XCTAssertTrue(QuickAccessLayout.toolbarContains(CGPoint(x: toolbar.midX, y: frame.maxY + 3),
             imageRect: frame, style: .below, placement: .bottomRight))
-        for center in QuickAccessLayout.bubblePositions(around: frame) {
+        let ring = QuickAccessRingGeometry(imageRect: frame)
+        for point in [CGPoint(x: frame.midX, y: frame.minY - 2),
+                      CGPoint(x: frame.midX, y: frame.maxY + 2),
+                      CGPoint(x: frame.minX - 2, y: frame.midY),
+                      CGPoint(x: frame.maxX + 2, y: frame.midY)] {
+            XCTAssertTrue(QuickAccessLayout.toolbarContains(point, imageRect: frame,
+                style: .bubbles, placement: .bottomRight))
+            XCTAssertNil(ring.segment(at: point))
+        }
+        for index in 0..<ring.segmentCount {
+            let center = ring.center(for: index)
             XCTAssertTrue(QuickAccessLayout.toolbarContains(center, imageRect: frame,
                 style: .bubbles, placement: .bottomRight))
         }
         XCTAssertFalse(QuickAccessLayout.toolbarContains(CGPoint(x: frame.minX - 30, y: frame.minY - 30),
             imageRect: frame, style: .bubbles, placement: .bottomRight))
-        XCTAssertFalse(QuickAccessLayout.toolbarContains(CGPoint(x: frame.midX, y: frame.maxY + 16),
+        XCTAssertFalse(QuickAccessLayout.toolbarContains(CGPoint(x: frame.midX, y: frame.midY),
             imageRect: frame, style: .bubbles, placement: .bottomRight))
+    }
+
+    func testRingHitTestingAcrossEverySegmentAndSeam() {
+        let ring = QuickAccessRingGeometry(imageRect: CGRect(x: 44, y: 76, width: 240, height: 180))
+        for index in 0..<ring.segmentCount {
+            for fraction in [-0.499, -0.25, 0, 0.25, 0.499] {
+                let angle = ring.centerAngle(for: index) + fraction * ring.segmentAngle
+                let inner = ring.point(at: angle, on: ring.innerBounds)
+                let outer = ring.point(at: angle, on: ring.outerBounds)
+                let point = CGPoint(x: (inner.x + outer.x) / 2, y: (inner.y + outer.y) / 2)
+                XCTAssertEqual(ring.segment(at: point), index)
+            }
+        }
+        XCTAssertNil(ring.segment(at: CGPoint(x: ring.outerBounds.maxX + 1, y: ring.outerBounds.midY)))
+        XCTAssertNil(ring.segment(at: CGPoint(x: CGFloat.infinity, y: 0)))
     }
 }

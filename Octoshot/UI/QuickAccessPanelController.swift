@@ -494,9 +494,11 @@ struct QuickAccessStackView: View {
             if entries.count > 1 {
                 let top = frames.prefix(expanded ? entries.count : QuickAccessStackGeometry.maxCollapsedLayers)
                     .min { $0.minY < $1.minY } ?? .zero
+                let paletteTop = selectedToolbarStyle == .bubbles ? entries.firstIndex { $0.id == activeHover }
+                    .map { QuickAccessRingGeometry(imageRect: frames[$0]).outerBounds.minY } : nil
                 header
                     .frame(width: top.width, alignment: .trailing)
-                    .offset(x: top.minX, y: top.minY - 32)
+                    .offset(x: top.minX, y: min(top.minY, paletteTop ?? top.minY) - 32)
                     .zIndex(Double(entries.count + 2))
                     .animation(reduceMotion || !animatesAppearance ? nil :
                         .spring(response: 0.42, dampingFraction: 0.82).delay(Double(entries.count - 1) * 0.03), value: expanded)
@@ -673,22 +675,15 @@ private struct QuickAccessCard: View {
             .accessibilityHidden(!isHovering)
             .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82), value: isHovering)
         } else {
-            let positions = QuickAccessLayout.bubblePositions(around: CGRect(origin: .zero, size: thumbSize))
-            ZStack(alignment: .topLeading) {
-                ForEach(actions.indices, id: \.self) { index in
-                    actionButton(index)
-                        .background(.regularMaterial, in: Circle())
-                        .shadow(color: .black.opacity(0.22), radius: 4, y: 2)
-                        .scaleEffect(isHovering ? 1 : 0.35)
-                        .opacity(isHovering ? 1 : 0)
-                        .position(positions[index])
-                        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.76)
-                            .delay(Double(index) * 0.03), value: isHovering)
-                }
-            }
-            .frame(width: thumbSize.width, height: thumbSize.height)
+            let geometry = QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: thumbSize))
+            QuickAccessRingPalette(imageSize: thumbSize, actions: actions)
+            .frame(width: geometry.outerBounds.width, height: geometry.outerBounds.height)
+            .opacity(isHovering ? 1 : 0)
+            .scaleEffect(isHovering || reduceMotion ? 1 : 0.94)
+            .position(x: thumbSize.width / 2, y: thumbSize.height / 2)
             .allowsHitTesting(isHovering)
             .accessibilityHidden(!isHovering)
+            .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8), value: isHovering)
         }
     }
 
@@ -722,6 +717,90 @@ private struct QuickAccessCard: View {
         }
         onAlternateAction()
         speculativeState.phase = .hidden
+    }
+}
+
+private struct QuickAccessRingShape: Shape {
+    var segment: Int?
+
+    func path(in rect: CGRect) -> Path {
+        let margin = QuickAccessRingGeometry.outerMargin
+        let geometry = QuickAccessRingGeometry(imageRect: rect.insetBy(dx: margin, dy: margin))
+        var path = Path()
+        if let segment {
+            let start = geometry.centerAngle(for: segment) - geometry.segmentAngle / 2
+            for step in 0...40 {
+                let angle = start + geometry.segmentAngle * CGFloat(step) / 40
+                let point = geometry.point(at: angle, on: geometry.outerBounds)
+                if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            for step in (0...40).reversed() {
+                path.addLine(to: geometry.point(at: start + geometry.segmentAngle * CGFloat(step) / 40,
+                                               on: geometry.innerBounds))
+            }
+            path.closeSubpath()
+        } else {
+            for (bounds, direction) in [(geometry.outerBounds, CGFloat(1)), (geometry.innerBounds, CGFloat(-1))] {
+                for step in 0...240 {
+                    let point = geometry.point(at: direction * 2 * .pi * CGFloat(step) / 240, on: bounds)
+                    if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                }
+                path.closeSubpath()
+            }
+        }
+        return path
+    }
+}
+
+private struct QuickAccessRingPalette: View {
+    let imageSize: CGSize
+    let actions: [(symbol: String, label: String, action: () -> Void)]
+    @State private var highlightedSegment: Int?
+
+    private var geometry: QuickAccessRingGeometry {
+        let margin = QuickAccessRingGeometry.outerMargin
+        return QuickAccessRingGeometry(imageRect: CGRect(origin: CGPoint(x: margin, y: margin), size: imageSize))
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            QuickAccessRingShape()
+                .fill(.regularMaterial)
+                .opacity(0.86)
+                .overlay { QuickAccessRingShape().stroke(.white.opacity(0.42), lineWidth: 0.75) }
+                .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
+            ForEach(actions.indices, id: \.self) { index in
+                let shape = QuickAccessRingShape(segment: index)
+                Button(action: actions[index].action) {
+                    shape.fill(highlightedSegment == index ? Color.accentColor.opacity(0.32) : .clear)
+                        .overlay(alignment: .topLeading) {
+                            Image(systemName: actions[index].symbol)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .position(geometry.center(for: index))
+                        }
+                        .contentShape(shape)
+                }
+                .buttonStyle(.plain)
+                .help(actions[index].label)
+                .accessibilityLabel(actions[index].label)
+                .accessibilityIdentifier("quick-access-ring-\(index)")
+                Path { path in
+                    let angle = geometry.centerAngle(for: index) - geometry.segmentAngle / 2
+                    path.move(to: geometry.point(at: angle, on: geometry.innerBounds))
+                    path.addLine(to: geometry.point(at: angle, on: geometry.outerBounds))
+                }
+                .stroke(.primary.opacity(0.16), lineWidth: 0.75)
+                .allowsHitTesting(false)
+            }
+        }
+        .contentShape(QuickAccessRingShape())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point): highlightedSegment = geometry.segment(at: point)
+            case .ended: highlightedSegment = nil
+            }
+        }
     }
 }
 

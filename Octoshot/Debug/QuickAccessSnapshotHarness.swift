@@ -30,6 +30,12 @@ enum QuickAccessSnapshotHarness {
             try render(entries: entries, destination: destination.appendingPathComponent("v3-toolbar-B-collapsed.png"),
                        expanded: false, style: .bubbles, hoveredID: entries[0].id)
             let frames = destination.appendingPathComponent("v3-expand-frames", isDirectory: true)
+            try render(entries: entries, destination: destination.appendingPathComponent("v4-toolbar-A.png"),
+                       expanded: true, style: .below, hoveredID: entries[1].id, canvasHeight: 700)
+            try render(entries: entries, destination: destination.appendingPathComponent("v4-toolbar-B.png"),
+                       expanded: true, style: .bubbles, hoveredID: entries[1].id, canvasHeight: 700)
+            try render(entries: entries, destination: destination.appendingPathComponent("v4-toolbar-B-collapsed.png"),
+                       expanded: false, style: .bubbles, hoveredID: entries[0].id, canvasHeight: 700)
             try FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
             for index in 0..<24 {
                 try render(entries: entries,
@@ -45,7 +51,7 @@ enum QuickAccessSnapshotHarness {
 
     private static func render(entries: [QuickAccessEntry], destination: URL, expanded: Bool,
                                style: QuickAccessToolbarStyle = .below, hoveredID: UUID? = nil,
-                               progress: CGFloat? = nil) throws {
+                               progress: CGFloat? = nil, canvasHeight: CGFloat = 620) throws {
         let presentation = QuickAccessStackPresentation()
         presentation.syncItemIDs(entries.map { QuickAccessStackItemID($0.id) })
         if expanded { presentation.expand() }
@@ -57,7 +63,7 @@ enum QuickAccessSnapshotHarness {
         )
         .environment(\.quickAccessDragOverlayEnabled, false)
         .environment(\.quickAccessSnapshotState, QuickAccessSnapshotState(hoveredID: hoveredID, progress: progress))
-        .frame(width: 392, height: 620, alignment: .bottom)
+        .frame(width: 392, height: canvasHeight, alignment: .bottom)
         .background(LinearGradient(
             colors: [Color(red: 0.12, green: 0.2, blue: 0.35), Color(red: 0.4, green: 0.2, blue: 0.48)],
             startPoint: .topLeading, endPoint: .bottomTrailing

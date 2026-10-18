@@ -177,10 +177,7 @@ public enum QuickAccessLayout {
     public static func toolbarRects(for rect: CGRect, style: QuickAccessToolbarStyle,
                                     placement: QuickAccessPlacement) -> [CGRect] {
         if style == .below { return [belowToolbarFrame(for: rect, placement: placement)] }
-        return bubblePositions(around: rect).map {
-            CGRect(x: $0.x - bubbleDiameter / 2, y: $0.y - bubbleDiameter / 2,
-                   width: bubbleDiameter, height: bubbleDiameter)
-        }
+        return [QuickAccessRingGeometry(imageRect: rect).outerBounds]
     }
 
     public static func hoverFrames(sizes: [CGSize], expanded: Bool, placement: QuickAccessPlacement,
@@ -303,19 +300,6 @@ public enum QuickAccessLayout {
         }
     }
 
-    public static func bubblePositions(around rect: CGRect, count: Int = 6) -> [CGPoint] {
-        guard count > 0 else { return [] }
-        let clearance = bubbleDiameter / 2 + 7
-        return (0..<count).map { index in
-            let angle = 2 * CGFloat.pi * CGFloat(index) / CGFloat(count)
-            let horizontal = cos(angle)
-            let vertical = sin(angle)
-            let edge = 1 / max(abs(horizontal), abs(vertical))
-            return CGPoint(x: rect.midX + horizontal * edge * max(30, rect.width / 2 + clearance),
-                           y: rect.midY + vertical * edge * max(30, rect.height / 2 + clearance))
-        }
-    }
-
     public static func belowToolbarFrame(for rect: CGRect, placement: QuickAccessPlacement) -> CGRect {
         let trailing = placement == .bottomRight || placement == .rightSidebar
         return CGRect(x: trailing ? rect.maxX - 196 : rect.minX, y: rect.maxY + 6, width: 196, height: 36)
@@ -326,9 +310,9 @@ public enum QuickAccessLayout {
         if style == .below {
             return belowToolbarFrame(for: imageRect, placement: placement).insetBy(dx: 0, dy: -6).contains(point)
         }
-        return bubblePositions(around: imageRect).contains { center in
-            hypot(point.x - center.x, point.y - center.y) <= bubbleDiameter / 2 + 7
-        }
+        let ring = QuickAccessRingGeometry(imageRect: imageRect)
+        return ring.segment(at: point) != nil ||
+            (!imageRect.contains(point) && ring.innerBounds.contains(point))
     }
 
     public static func sampledFrames(sizes: [CGSize], placement: QuickAccessPlacement,
@@ -345,6 +329,49 @@ public enum QuickAccessLayout {
         if time <= 0 { return 0 }
         if time >= 1 { return 1 }
         return 1 - exp(-8 * time) * (cos(10 * time) + 0.8 * sin(10 * time))
+    }
+}
+
+public struct QuickAccessRingGeometry {
+    public static let outerMargin: CGFloat = 36
+    public static let innerMargin: CGFloat = 4
+    public let imageRect: CGRect
+    public let segmentCount = 6
+    public var segmentAngle: CGFloat { 2 * .pi / CGFloat(segmentCount) }
+    public var outerBounds: CGRect { imageRect.insetBy(dx: -Self.outerMargin, dy: -Self.outerMargin) }
+    public var innerBounds: CGRect { imageRect.insetBy(dx: -Self.innerMargin, dy: -Self.innerMargin) }
+
+    public init(imageRect: CGRect) { self.imageRect = imageRect }
+
+    public func centerAngle(for index: Int) -> CGFloat {
+        -.pi / 2 + CGFloat(index) * segmentAngle
+    }
+
+    public func point(at angle: CGFloat, on bounds: CGRect) -> CGPoint {
+        let radius = 1 / sqrt(pow(cos(angle) / (bounds.width / 2), 2) +
+                              pow(sin(angle) / (bounds.height / 2), 2))
+        return CGPoint(x: bounds.midX + cos(angle) * radius,
+                       y: bounds.midY + sin(angle) * radius)
+    }
+
+    public func center(for index: Int) -> CGPoint {
+        let inner = point(at: centerAngle(for: index), on: innerBounds)
+        let outer = point(at: centerAngle(for: index), on: outerBounds)
+        return CGPoint(x: (inner.x + outer.x) / 2, y: (inner.y + outer.y) / 2)
+    }
+
+    public func segment(at point: CGPoint) -> Int? {
+        guard point.x.isFinite, point.y.isFinite else { return nil }
+        let horizontal = point.x - imageRect.midX
+        let vertical = point.y - imageRect.midY
+        func ellipseValue(_ bounds: CGRect) -> CGFloat {
+            pow(horizontal / (bounds.width / 2), 2) + pow(vertical / (bounds.height / 2), 2)
+        }
+        guard ellipseValue(outerBounds) <= 1, ellipseValue(innerBounds) >= 1 else { return nil }
+        let angle = atan2(vertical, horizontal) + .pi / 2 + segmentAngle / 2
+        let normalized = (angle.truncatingRemainder(dividingBy: 2 * .pi) + 2 * .pi)
+            .truncatingRemainder(dividingBy: 2 * .pi)
+        return min(segmentCount - 1, Int(normalized / segmentAngle))
     }
 }
 
