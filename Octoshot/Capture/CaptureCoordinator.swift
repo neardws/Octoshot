@@ -133,8 +133,12 @@ final class CaptureCoordinator {
         do {
             let image = try await ScreenCaptureService.shared.captureWindow(window)
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
-            let cocoa = DisplayGeometry.cocoaRect(fromTopLeftFrame: window.frame)
-            let anchor = CGPoint(x: cocoa.midX, y: cocoa.midY)
+            let anchor = NSScreen.screens.first.map {
+                QuickAccessCaptureCoordinates.appKitPoint(
+                    fromQuartz: CGPoint(x: window.frame.midX, y: window.frame.midY),
+                    primaryFrame: $0.frame
+                )
+            }
             presentResult(image, captureAnchor: anchor)
         } catch {
             await PermissionManager.handleCaptureFailure(error)
