@@ -59,8 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        let caller = URLSchemeCaller.current()
         for url in urls {
-            AgentURLRouter.handle(url)
+            AgentURLRouter.handle(url, caller: caller)
         }
     }
 

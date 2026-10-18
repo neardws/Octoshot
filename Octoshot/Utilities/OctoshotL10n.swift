@@ -34,6 +34,67 @@ enum OctoshotL10n {
         String(localized: "Text recognition failed.", comment: "OCR error headline")
     }
 
+    static func urlSchemeConfirmTitle(appName: String) -> String {
+        String(
+            format: String(localized: "Allow “%@” to capture your screen?", comment: "URL scheme confirmation title"),
+            appName
+        )
+    }
+
+    static var urlSchemeConfirmTitleUnknownApp: String {
+        String(localized: "Allow an app to capture your screen?", comment: "URL scheme confirmation title, caller unknown")
+    }
+
+    static var urlSchemeConfirmCaptureBody: String {
+        String(
+            localized: "It asked Octoshot to take a full-screen screenshot and save it to your save folder.",
+            comment: "URL scheme confirmation body for a capture"
+        )
+    }
+
+    static var urlSchemeConfirmRecordBody: String {
+        String(localized: "It asked Octoshot to start recording your screen.", comment: "URL scheme confirmation body for a recording")
+    }
+
+    static var urlSchemeAllow: String {
+        String(localized: "Allow", comment: "URL scheme confirmation: approve")
+    }
+
+    static var urlSchemeDontAllow: String {
+        String(localized: "Don’t Allow", comment: "URL scheme confirmation: decline")
+    }
+
+    static func urlSchemeAlwaysAllow(appName: String) -> String {
+        String(format: String(localized: "Always allow “%@”", comment: "URL scheme confirmation checkbox"), appName)
+    }
+
+    static var urlSchemePolicyLabel: String {
+        String(localized: "Requests from other apps", comment: "URL scheme policy picker label")
+    }
+
+    static func urlSchemePolicyName(_ policy: URLSchemeAutomationPolicy) -> String {
+        switch policy {
+        case .ask: return String(localized: "Ask every time", comment: "URL scheme policy")
+        case .allow: return String(localized: "Always allow", comment: "URL scheme policy")
+        case .off: return String(localized: "Off", comment: "URL scheme policy")
+        }
+    }
+
+    static var urlSchemeExplanation: String {
+        String(
+            localized: "Any app or web page can open octoshot:// links. With “Ask every time”, Octoshot confirms before a link takes a screenshot or starts a recording on its own. Links that open area or window selection always run, and stopping a recording is always allowed.",
+            comment: "URL scheme settings explanation"
+        )
+    }
+
+    static func urlSchemeForgetTrusted(count: Int) -> String {
+        String(format: String(localized: "Forget always-allowed apps (%d)", comment: "URL scheme: clear allowlist"), count)
+    }
+
+    static var urlSchemeSectionTitle: String {
+        String(localized: "URL scheme (octoshot://)", comment: "Settings section header")
+    }
+
     static var historyWindowTitle: String {
         String(localized: "Screenshot History", comment: "History browser window title")
     }
