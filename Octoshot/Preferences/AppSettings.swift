@@ -29,6 +29,7 @@ final class AppSettings: ObservableObject {
         static let format = "screenshotFormat"
         static let corner = "quickAccessCorner"
         static let stackCaptures = "quickAccessStackCaptures"
+        static let toolbarStyle = "quickAccessToolbarStyle"
         static let hotkeyArea = "hotkeyArea"
         static let hotkeyWindow = "hotkeyWindow"
         static let hotkeyFullscreen = "hotkeyFullscreen"
@@ -63,6 +64,10 @@ final class AppSettings: ObservableObject {
 
     @Published var quickAccessStackCaptures: Bool {
         didSet { UserDefaults.standard.set(quickAccessStackCaptures, forKey: Keys.stackCaptures) }
+    }
+
+    @Published var quickAccessToolbarStyle: QuickAccessToolbarStyle {
+        didSet { UserDefaults.standard.set(quickAccessToolbarStyle.rawValue, forKey: Keys.toolbarStyle) }
     }
 
     @Published var jpegQuality: Double {
@@ -154,6 +159,9 @@ final class AppSettings: ObservableObject {
         let cornerRaw = UserDefaults.standard.string(forKey: Keys.corner) ?? ""
         quickAccessPlacement = QuickAccessPlacement.migrated(fromLegacyRawValue: cornerRaw)
         quickAccessStackCaptures = UserDefaults.standard.object(forKey: Keys.stackCaptures) as? Bool ?? true
+        quickAccessToolbarStyle = QuickAccessToolbarStyle(
+            rawValue: UserDefaults.standard.string(forKey: Keys.toolbarStyle) ?? ""
+        ) ?? .below
 
         let quality = UserDefaults.standard.double(forKey: Keys.jpegQuality)
         jpegQuality = quality > 0 ? quality : 0.85

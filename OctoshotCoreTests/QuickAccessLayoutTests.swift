@@ -210,32 +210,32 @@ final class QuickAccessLayoutTests: XCTestCase {
         XCTAssertEqual(QuickAccessPlacement.migrated(fromLegacyRawValue: "unknown"), .bottomRight)
     }
 
-    func testCollapsedStackBottomRightFansLeftAndUp() {
+    func testCollapsedStackBottomRightAlignsEdgeAndMovesUp() {
         let offset = QuickAccessStackGeometry.collapsedOffset(index: 1, total: 3, placement: .bottomRight)
-        XCTAssertLessThan(offset.width, 0)
+        XCTAssertEqual(offset.width, 0)
         XCTAssertLessThan(offset.height, 0)
     }
 
-    func testCollapsedStackBottomLeftFansRightAndUp() {
+    func testCollapsedStackBottomLeftAlignsEdgeAndMovesUp() {
         let offset = QuickAccessStackGeometry.collapsedOffset(index: 1, total: 3, placement: .bottomLeft)
-        XCTAssertGreaterThan(offset.width, 0)
+        XCTAssertEqual(offset.width, 0)
         XCTAssertLessThan(offset.height, 0)
     }
 
-    func testCollapsedStackSidebarFansIntoDisplay() {
+    func testCollapsedStackSidebarAlsoBuildsBottomUp() {
         let left = QuickAccessStackGeometry.collapsedOffset(index: 1, total: 3, placement: .leftSidebar)
-        XCTAssertGreaterThan(left.width, 0)
-        XCTAssertGreaterThan(left.height, 0)
+        XCTAssertEqual(left.width, 0)
+        XCTAssertLessThan(left.height, 0)
 
         let right = QuickAccessStackGeometry.collapsedOffset(index: 1, total: 3, placement: .rightSidebar)
-        XCTAssertLessThan(right.width, 0)
-        XCTAssertGreaterThan(right.height, 0)
+        XCTAssertEqual(right.width, 0)
+        XCTAssertLessThan(right.height, 0)
     }
 
     func testCollapsedStackOffsetsIncreaseWithDepth() {
         let first = QuickAccessStackGeometry.collapsedOffset(index: 1, total: 4, placement: .bottomRight)
         let second = QuickAccessStackGeometry.collapsedOffset(index: 2, total: 4, placement: .bottomRight)
-        XCTAssertGreaterThan(abs(second.width), abs(first.width))
+        XCTAssertEqual(second.width, first.width)
         XCTAssertGreaterThan(abs(second.height), abs(first.height))
     }
 
@@ -252,7 +252,7 @@ final class QuickAccessLayoutTests: XCTestCase {
             total: 3,
             placement: .bottomRight
         )
-        XCTAssertGreaterThan(triple.width, card.width)
+        XCTAssertEqual(triple.width, card.width)
         XCTAssertGreaterThan(triple.height, card.height)
     }
 

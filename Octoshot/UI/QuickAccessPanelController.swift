@@ -20,21 +20,6 @@ private struct QuickAccessPanelSizeKey: PreferenceKey {
     }
 }
 
-private extension QuickAccessStackGeometry.CollapsedStackAnchor {
-    var swiftUIAlignment: Alignment {
-        switch self {
-        case .bottomLeading:
-            return .bottomLeading
-        case .bottomTrailing:
-            return .bottomTrailing
-        case .topLeading:
-            return .topLeading
-        case .topTrailing:
-            return .topTrailing
-        }
-    }
-}
-
 struct QuickAccessActions {
     var onCopy: () -> Void
     var onSave: () -> Void
@@ -202,6 +187,7 @@ final class QuickAccessPanelController: NSObject {
             maxThumbWidth: maxThumbWidth,
             maxThumbHeight: maxThumbHeight,
             maxExpandedHeight: max(1, (screenTracker.screenForReposition(screens: screenInfos)?.visibleFrame.height ?? 900) - 104),
+            toolbarStyle: settings.quickAccessToolbarStyle,
             onDismissEntry: { [weak self] id in self?.removeEntry(id: id) },
             onDismissAll: { [weak self] in self?.closePanel() },
             onUserChoseAlternateAction: { [weak self] entry in
@@ -252,7 +238,7 @@ final class QuickAccessPanelController: NSObject {
 
     private static func clampedPanelSize(from fitting: CGSize, maxThumbWidth: CGFloat) -> NSSize {
         NSSize(
-            width: min(max(fitting.width, 120), maxThumbWidth + 64),
+            width: min(max(fitting.width, 120), maxThumbWidth + QuickAccessLayout.padding * 2),
             height: fitting.height
         )
     }
@@ -260,8 +246,9 @@ final class QuickAccessPanelController: NSObject {
     private func position(panel: NSPanel, size: NSSize) {
         guard let screen = screenTracker.screenForReposition(screens: screenInfos) else { return }
         let margin: CGFloat = 16
+        let placement = AppSettings.shared.quickAccessPlacement
         let origin = QuickAccessPanelGeometry.panelOrigin(
-            placement: AppSettings.shared.quickAccessPlacement,
+            placement: placement == .leftSidebar ? .bottomLeft : placement == .rightSidebar ? .bottomRight : placement,
             visibleFrame: screen.visibleFrame,
             panelSize: CGSize(width: size.width, height: size.height),
             margin: margin
@@ -334,6 +321,24 @@ final class QuickAccessPanelController: NSObject {
     }
 }
 
+#if DEBUG
+private struct QuickAccessSnapshotStateKey: EnvironmentKey {
+    static let defaultValue = QuickAccessSnapshotState()
+}
+
+struct QuickAccessSnapshotState {
+    var hoveredID: UUID?
+    var progress: CGFloat?
+}
+
+extension EnvironmentValues {
+    var quickAccessSnapshotState: QuickAccessSnapshotState {
+        get { self[QuickAccessSnapshotStateKey.self] }
+        set { self[QuickAccessSnapshotStateKey.self] = newValue }
+    }
+}
+#endif
+
 struct QuickAccessStackView: View {
     let entries: [QuickAccessEntry]
     @ObservedObject var stackPresentation: QuickAccessStackPresentation
@@ -342,6 +347,7 @@ struct QuickAccessStackView: View {
     let maxThumbHeight: CGFloat
     var maxExpandedHeight: CGFloat = 796
     var animatesAppearance: Bool = true
+    var toolbarStyle: QuickAccessToolbarStyle = .below
     let onDismissEntry: (UUID) -> Void
     let onDismissAll: () -> Void
     let onUserChoseAlternateAction: (QuickAccessEntry) -> Void
@@ -349,44 +355,90 @@ struct QuickAccessStackView: View {
     let onStackExpandedChange: (Bool) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isStackHovering = false
-    @State private var panelAppeared = false
+    @State private var visualExpanded = false
+    @State private var reservesExpandedSpace = false
+    @State private var hoveredID: UUID?
+    @State private var canvasViewportOrigin: CGPoint = .zero
+    @ObservedObject private var settings = AppSettings.shared
+#if DEBUG
+    @Environment(\.quickAccessSnapshotState) private var snapshotState
+#endif
 
-    private var useCollapsedStack: Bool {
-        stackPresentation.stack.showsCollapsedStack
+    private var targetExpanded: Bool { !stackPresentation.stack.showsCollapsedStack }
+    private var selectedToolbarStyle: QuickAccessToolbarStyle {
+        animatesAppearance ? settings.quickAccessToolbarStyle : toolbarStyle
+    }
+    private var expanded: Bool { animatesAppearance ? visualExpanded : targetExpanded }
+    private var sizes: [CGSize] {
+        entries.map {
+            QuickAccessPanelController.aspectFitSize(for: $0.image, maxWidth: maxThumbWidth, maxHeight: maxThumbHeight)
+        }
+    }
+    private var canvasSize: CGSize {
+        if reservesExpandedSpace || expanded {
+            let collapsed = reservedSize(expanded: false)
+            let expanded = reservedSize(expanded: true)
+            return CGSize(width: max(collapsed.width, expanded.width), height: max(collapsed.height, expanded.height))
+        }
+        return reservedSize(expanded: false)
+    }
+    private func reservedSize(expanded: Bool) -> CGSize {
+        QuickAccessLayout.reservedContentSize(sizes: sizes, expanded: expanded,
+                                              placement: placement, style: selectedToolbarStyle)
+    }
+    private var visibleSize: CGSize {
+        CGSize(width: canvasSize.width, height: min(canvasSize.height, maxExpandedHeight))
+    }
+    private var frames: [CGRect] {
+#if DEBUG
+        if let progress = snapshotState.progress {
+            return sizes.indices.map { index in
+                let time = min(1, max(0, (progress * 0.85 - CGFloat(index) * 0.03) / 0.65))
+                return QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+                    progress: QuickAccessLayout.springProgress(time), canvasHeight: canvasSize.height,
+                    hoveredIndex: entries.firstIndex { $0.id == activeHover }, style: selectedToolbarStyle)[index]
+            }
+        }
+#endif
+        return QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+            progress: expanded ? 1 : 0, canvasHeight: canvasSize.height,
+            hoveredIndex: entries.firstIndex { $0.id == activeHover }, style: selectedToolbarStyle)
+    }
+    private var activeHover: UUID? {
+#if DEBUG
+        if let forced = snapshotState.hoveredID { return forced }
+#endif
+        return hoveredID
     }
 
     var body: some View {
-        VStack(alignment: horizontalAlignment, spacing: 10) {
-            if entries.count > 1 {
-                stackHeader
-            }
-
-            if useCollapsedStack {
-                collapsedStack
-                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: collapseTransitionAnchor)))
-            } else {
-                expandedList
-                    .transition(.opacity)
-            }
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: useCollapsedStack)
-        // No outer container: thumbnails float directly on the desktop (Finder-stack style).
-        // The transparent padding only leaves room for card shadows and the 3D lift.
-        .padding(16)
-        .scaleEffect(panelAppeared || reduceMotion || !animatesAppearance ? 1 : 0.94)
-        .opacity(panelAppeared || reduceMotion || !animatesAppearance ? 1 : 0)
-        .onAppear {
-            guard !reduceMotion, animatesAppearance else {
-                panelAppeared = true
+        viewport
+        .coordinateSpace(name: "quickAccessViewport")
+        .task(id: targetExpanded) {
+            onStackExpandedChange(stackPresentation.stack.isExpanded)
+            hoveredID = nil
+            if reduceMotion || !animatesAppearance {
+                visualExpanded = targetExpanded
+                reservesExpandedSpace = targetExpanded
+                onContentSizeChange(visibleSize)
                 return
             }
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
-                panelAppeared = true
+            if targetExpanded {
+                reservesExpandedSpace = true
+                let collapsed = reservedSize(expanded: false)
+                let expanded = reservedSize(expanded: true)
+                let union = CGSize(width: max(collapsed.width, expanded.width), height: max(collapsed.height, expanded.height))
+                onContentSizeChange(CGSize(width: union.width, height: min(union.height, maxExpandedHeight)))
+                try? await Task.sleep(for: .milliseconds(20))
+                guard !Task.isCancelled else { return }
+                visualExpanded = true
+            } else {
+                visualExpanded = false
+                try? await Task.sleep(for: .milliseconds(1000))
+                guard !Task.isCancelled else { return }
+                reservesExpandedSpace = false
+                onContentSizeChange(visibleSize)
             }
-        }
-        .onChange(of: stackPresentation.stack.isExpanded) { _, expanded in
-            onStackExpandedChange(expanded)
         }
         .background {
             GeometryReader { proxy in
@@ -399,209 +451,115 @@ struct QuickAccessStackView: View {
         }
     }
 
-    private var horizontalAlignment: HorizontalAlignment {
-        switch placement {
-        case .bottomLeft, .leftSidebar:
-            return .leading
-        case .bottomRight, .rightSidebar:
-            return .trailing
-        }
-    }
-
-    private var collapseTransitionAnchor: UnitPoint {
-        switch placement {
-        case .bottomLeft:
-            return .bottomLeading
-        case .bottomRight:
-            return .bottomTrailing
-        case .leftSidebar:
-            return .topLeading
-        case .rightSidebar:
-            return .topTrailing
-        }
-    }
-
     @ViewBuilder
-    private var stackHeader: some View {
-        stackHeaderButtons
-            .padding(.horizontal, stackHeaderHasButtons ? 10 : 0)
-            .padding(.vertical, stackHeaderHasButtons ? 5 : 0)
-            .background {
-                if stackHeaderHasButtons {
-                    Capsule().fill(.regularMaterial)
-                        .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
-                }
-            }
-    }
-
-    private var stackHeaderHasButtons: Bool {
-        stackPresentation.stack.isExpanded || isStackHovering || !useCollapsedStack
-    }
-
-    @ViewBuilder
-    private var stackHeaderButtons: some View {
-        HStack(spacing: 10) {
-            if stackPresentation.stack.isExpanded {
-                Button(action: collapseStack) {
-                    Label(OctoshotL10n.quickAccessCollapseStack, systemImage: "rectangle.arrowtriangle.2.inward")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(OctoshotL10n.quickAccessCollapseStack)
-            }
-            if stackPresentation.stack.isExpanded || isStackHovering || !useCollapsedStack {
-                Button(action: onDismissAll) {
-                    Label(OctoshotL10n.quickAccessCloseAll, systemImage: "xmark.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(OctoshotL10n.quickAccessCloseAll)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var expandedList: some View {
-        let height = entries.reduce(CGFloat(0)) { total, entry in
-            total + QuickAccessPanelController.aspectFitSize(
-                for: entry.image, maxWidth: maxThumbWidth, maxHeight: maxThumbHeight
-            ).height
-        } + CGFloat(max(0, entries.count - 1)) * 10
-        if height > maxExpandedHeight {
-            ScrollView(.vertical) {
-                expandedCards
-            }
-            .frame(width: maxThumbWidth, height: maxExpandedHeight)
+    private var viewport: some View {
+        if !animatesAppearance {
+            canvas
         } else {
-            expandedCards
+            ScrollViewReader { scroll in
+                ScrollView(.vertical, showsIndicators: canvasSize.height > maxExpandedHeight) {
+                    canvas
+                        .overlay(alignment: .bottom) { Color.clear.frame(height: 1).id("bottom") }
+                }
+                .defaultScrollAnchor(.bottom)
+                .scrollClipDisabled()
+                .frame(width: visibleSize.width, height: visibleSize.height)
+                .onChange(of: canvasSize) { _, _ in scroll.scrollTo("bottom", anchor: .bottom) }
+            }
         }
     }
 
-    private var expandedCards: some View {
-        VStack(alignment: horizontalAlignment, spacing: 10) {
-            ForEach(entries) { entry in
+    private var canvas: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                let frame = frames[index]
                 QuickAccessCard(
-                    entry: entry,
-                    placement: placement,
-                    thumbSize: QuickAccessPanelController.aspectFitSize(
-                        for: entry.image,
-                        maxWidth: maxThumbWidth,
-                        maxHeight: maxThumbHeight
-                    ),
+                    entry: entry, placement: placement, thumbSize: sizes[index],
                     onClose: { onDismissEntry(entry.id) },
                     onAlternateAction: { onUserChoseAlternateAction(entry) },
-                    onDragSucceeded: { onDismissEntry(entry.id) }
+                    onDragSucceeded: { onDismissEntry(entry.id) },
+                    onThumbnailClick: { if !expanded { stackPresentation.expand() } },
+                    showsActionsOnHover: expanded || index == 0,
+                    toolbarStyle: selectedToolbarStyle, isHovering: activeHover == entry.id,
+                    viewportSize: visibleSize
                 )
-                .frame(width: maxThumbWidth, alignment: cardFrameAlignment)
-                .transition(
-                    .asymmetric(
-                        insertion: .scale(scale: 0.9).combined(with: .opacity),
-                        removal: .opacity
-                    )
-                )
+                .frame(width: sizes[index].width, height: sizes[index].height)
+                .scaleEffect(frame.width / sizes[index].width, anchor: .topLeading)
+                .offset(x: frame.minX, y: frame.minY)
+                .opacity(expanded || index < QuickAccessStackGeometry.maxCollapsedLayers ? 1 : 0)
+                .zIndex(activeHover == entry.id ? Double(entries.count + (selectedToolbarStyle == .bubbles ? 3 : 1)) : Double(entries.count - index))
+                .allowsHitTesting(expanded || index == 0)
+                .animation(reduceMotion || !animatesAppearance ? nil :
+                    .spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.03), value: expanded)
+                .animation(reduceMotion || !animatesAppearance ? nil :
+                    .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
+            }
+            if entries.count > 1 {
+                let top = frames.prefix(expanded ? entries.count : QuickAccessStackGeometry.maxCollapsedLayers)
+                    .min { $0.minY < $1.minY } ?? .zero
+                header
+                    .frame(width: top.width, alignment: .trailing)
+                    .offset(x: top.minX, y: top.minY - 32)
+                    .zIndex(Double(entries.count + 2))
+                    .animation(reduceMotion || !animatesAppearance ? nil :
+                        .spring(response: 0.42, dampingFraction: 0.82).delay(Double(entries.count - 1) * 0.03), value: expanded)
+                    .animation(reduceMotion || !animatesAppearance ? nil :
+                        .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
             }
         }
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: entries.map(\.id))
-    }
-
-    private var collapsedStack: some View {
-        let sizes = entries.map {
-            QuickAccessPanelController.aspectFitSize(
-                for: $0.image, maxWidth: maxThumbWidth, maxHeight: maxThumbHeight
-            )
+        .frame(width: canvasSize.width, height: canvasSize.height, alignment: .topLeading)
+        .onGeometryChange(for: CGPoint.self) { proxy in
+            proxy.frame(in: .named("quickAccessViewport")).origin
+        } action: { origin in
+            canvasViewportOrigin = origin
         }
-        let frames = QuickAccessStackGeometry.collapsedCardFrames(sizes: sizes, placement: placement)
-        let bounds = frames.reduce(CGRect.null) { $0.union($1) }
-
-        return ZStack(alignment: .topLeading) {
-            ForEach(Array(entries.enumerated().reversed()), id: \.element.id) { index, entry in
-                if index < QuickAccessStackGeometry.maxCollapsedLayers {
-                    let thumbSize = QuickAccessPanelController.aspectFitSize(
-                        for: entry.image,
-                        maxWidth: maxThumbWidth,
-                        maxHeight: maxThumbHeight
-                    )
-                    QuickAccessCard(
-                        entry: entry,
-                        placement: placement,
-                        thumbSize: thumbSize,
-                        onClose: { onDismissEntry(entry.id) },
-                        onAlternateAction: { onUserChoseAlternateAction(entry) },
-                        onDragSucceeded: index == 0 ? { onDismissEntry(entry.id) } : nil,
-                        onThumbnailClick: index == 0 ? { expandStackIfNeeded() } : nil,
-                        showsActionsOnHover: index == 0
-                    )
-                    .overlay(alignment: stackBadgeAlignment) {
-                        if index == 0, entries.count > 1 {
-                            stackCountBadge
-                        }
-                    }
-                    .offset(x: frames[index].minX, y: frames[index].minY)
-                    .zIndex(QuickAccessStackGeometry.collapsedZIndex(index: index, total: entries.count))
-                    .allowsHitTesting(index == 0)
-                }
-            }
-        }
-        .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
-        .frame(minWidth: maxThumbWidth, alignment: cardFrameAlignment)
-        .padding(.top, 44)
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: entries.count)
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isStackHovering = hovering
-        }
         .onTapGesture {
-            expandStackIfNeeded()
+            if !expanded { stackPresentation.expand() }
         }
-    }
-
-    private var stackCountBadge: some View {
-        Text("\(entries.count)")
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.accentColor))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-            .padding(6)
-            .allowsHitTesting(false)
-    }
-
-    private var cardFrameAlignment: Alignment {
-        placement == .bottomLeft || placement == .leftSidebar ? .leading : .trailing
-    }
-
-    private var stackBadgeAlignment: Alignment {
-        switch placement {
-        case .bottomLeft, .leftSidebar:
-            return .topLeading
-        case .bottomRight, .rightSidebar:
-            return .topTrailing
-        }
-    }
-
-    private func expandStackIfNeeded() {
-        guard !stackPresentation.stack.isExpanded else { return }
-        if reduceMotion {
-            stackPresentation.expand()
-        } else {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                stackPresentation.expand()
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point): updateHover(at: point)
+            case .ended: hoveredID = nil
             }
         }
     }
 
-    private func collapseStack() {
-        guard stackPresentation.stack.isExpanded else { return }
-        if reduceMotion {
-            stackPresentation.collapse()
-        } else {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                stackPresentation.collapse()
+    private var header: some View {
+        HStack(spacing: 10) {
+            Text("\(entries.count)").font(.system(size: 11, weight: .bold, design: .rounded))
+            if expanded {
+                Button(action: { stackPresentation.collapse() }) {
+                    Image(systemName: "rectangle.arrowtriangle.2.inward")
+                }
+                .help(OctoshotL10n.quickAccessCollapseStack)
+                .accessibilityLabel(OctoshotL10n.quickAccessCollapseStack)
             }
+            Button(action: onDismissAll) { Image(systemName: "xmark") }
+                .help(OctoshotL10n.quickAccessCloseAll)
+                .accessibilityLabel(OctoshotL10n.quickAccessCloseAll)
         }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .semibold))
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+    }
+
+    private func updateHover(at point: CGPoint) {
+        let eligible = expanded ? Array(entries.indices) : Array(entries.indices.prefix(1))
+        if let current = eligible.first(where: { entries[$0].id == hoveredID }) {
+            let frame = frames[current]
+            let resting = QuickAccessLayout.presentedFrames(sizes: sizes, placement: placement,
+                progress: expanded ? 1 : 0, canvasHeight: canvasSize.height,
+                hoveredIndex: nil, style: selectedToolbarStyle)[current]
+            if frame.union(resting).contains(point) { return }
+            if !frame.contains(point), QuickAccessLayout.toolbarContains(
+                point, imageRect: frame, style: selectedToolbarStyle, placement: placement,
+                visibleBounds: CGRect(origin: .zero, size: visibleSize).insetBy(dx: 10, dy: 10)
+                    .offsetBy(dx: -canvasViewportOrigin.x, dy: -canvasViewportOrigin.y)
+            ) { return }
+        }
+        hoveredID = eligible.first(where: { frames[$0].contains(point) }).map { entries[$0].id }
     }
 }
 
@@ -615,21 +573,18 @@ private struct QuickAccessCard: View {
     var onDragSucceeded: (() -> Void)?
     var onThumbnailClick: (() -> Void)?
     var showsActionsOnHover: Bool = true
+    var toolbarStyle: QuickAccessToolbarStyle
+    var isHovering: Bool
+    var viewportSize: CGSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.quickAccessDragOverlayEnabled) private var dragOverlayEnabled
-    @State private var isHovering = false
 
-    init(
-        entry: QuickAccessEntry,
-        placement: QuickAccessPlacement,
-        thumbSize: NSSize,
-        onClose: @escaping () -> Void,
-        onAlternateAction: @escaping () -> Void,
-        onDragSucceeded: (() -> Void)? = nil,
-        onThumbnailClick: (() -> Void)? = nil,
-        showsActionsOnHover: Bool = true
-    ) {
+    init(entry: QuickAccessEntry, placement: QuickAccessPlacement, thumbSize: NSSize,
+         onClose: @escaping () -> Void, onAlternateAction: @escaping () -> Void,
+         onDragSucceeded: (() -> Void)? = nil, onThumbnailClick: (() -> Void)? = nil,
+         showsActionsOnHover: Bool = true, toolbarStyle: QuickAccessToolbarStyle = .below,
+         isHovering: Bool = false, viewportSize: CGSize) {
         self.entry = entry
         self.placement = placement
         self.speculativeState = entry.speculativeState
@@ -639,6 +594,20 @@ private struct QuickAccessCard: View {
         self.onDragSucceeded = onDragSucceeded
         self.onThumbnailClick = onThumbnailClick
         self.showsActionsOnHover = showsActionsOnHover
+        self.toolbarStyle = toolbarStyle
+        self.isHovering = isHovering
+        self.viewportSize = viewportSize
+    }
+
+    private var actions: [(symbol: String, label: String, action: () -> Void)] {
+        [
+            ("doc.on.clipboard", OctoshotL10n.quickAccessCopy, wrapAlternate(entry.actions.onCopy)),
+            ("square.and.arrow.down", OctoshotL10n.quickAccessSave, wrapAlternate(entry.actions.onSave)),
+            ("pencil.and.outline", OctoshotL10n.quickAccessAnnotate, wrapAlternate(entry.actions.onAnnotate)),
+            ("pin", OctoshotL10n.quickAccessPin, wrapAlternate(entry.actions.onPin)),
+            ("text.viewfinder", OctoshotL10n.ocrAction, wrapAlternate(entry.actions.onOCR)),
+            ("xmark", OctoshotL10n.quickAccessDismissCapture, onClose)
+        ]
     }
 
     var body: some View {
@@ -649,128 +618,101 @@ private struct QuickAccessCard: View {
                 .frame(width: thumbSize.width, height: thumbSize.height)
                 .overlay {
                     if dragOverlayEnabled {
-                        DraggableThumbnailView(
-                            image: entry.image,
-                            size: thumbSize,
-                            onClick: onThumbnailClick,
-                            onDragEnded: { operation in
-                                if QuickAccessDragOutcome.fromEndedDragOperation(operation) == .removeFromStack {
-                                    onDragSucceeded?()
-                                }
+                        DraggableThumbnailView(image: entry.image, size: thumbSize,
+                                               onClick: onThumbnailClick, onDragEnded: { operation in
+                            if QuickAccessDragOutcome.fromEndedDragOperation(operation) == .removeFromStack {
+                                onDragSucceeded?()
                             }
-                        )
+                        })
                         .frame(width: thumbSize.width, height: thumbSize.height)
                     }
                 }
         }
-        .overlay(alignment: dismissButtonAlignment) {
-            if isHovering {
+        .overlay(alignment: .topTrailing) {
+            if toolbarStyle == .below, showsActionsOnHover, isHovering {
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.black.opacity(0.45))
-                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                        .foregroundStyle(.white, Color.black.opacity(0.5))
                 }
                 .buttonStyle(.plain)
                 .help(OctoshotL10n.quickAccessDismissCapture)
+                .accessibilityLabel(OctoshotL10n.quickAccessDismissCapture)
                 .padding(6)
-                .transition(.opacity)
             }
         }
+        .overlay(alignment: .topLeading) {
+            if showsActionsOnHover {
+                toolbar
+            }
+        }
+        .overlay(alignment: .top) {
+            if isHovering {
+                SpeculativePrimaryButton(phase: speculativeState.phase, onApply: applySpeculativeResult)
+                    .offset(y: -40)
+            }
+        }
+        .contextMenu {
+            if let action = entry.actions.onAskAI {
+                Button(OctoshotL10n.quickAccessAskAI, action: wrapAlternate(action))
+            }
+            if let action = entry.actions.onCopyMarkdown {
+                Button(OctoshotL10n.quickAccessCopyMarkdown, action: wrapAlternate(action))
+            }
+            if let action = entry.actions.onCopyPath {
+                Button(OctoshotL10n.quickAccessCopyPath, action: wrapAlternate(action))
+            }
+        }
+    }
 
-        .overlay(alignment: actionOverlayAlignment) {
-            if showsActionsOnHover, isHovering {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    HStack(spacing: 6) {
-                        QuickAccessButton(
-                            symbol: "doc.on.clipboard",
-                            label: OctoshotL10n.quickAccessCopy,
-                            action: wrapAlternate(entry.actions.onCopy)
-                        )
-                        QuickAccessButton(
-                            symbol: "square.and.arrow.down.fill",
-                            label: OctoshotL10n.quickAccessSave,
-                            action: wrapAlternate(entry.actions.onSave)
-                        )
-                        QuickAccessButton(
-                            symbol: "pencil.and.outline",
-                            label: OctoshotL10n.quickAccessAnnotate,
-                            action: wrapAlternate(entry.actions.onAnnotate)
-                        )
-                        QuickAccessButton(
-                            symbol: "pin.circle.fill",
-                            label: OctoshotL10n.quickAccessPin,
-                            action: wrapAlternate(entry.actions.onPin)
-                        )
-                        QuickAccessButton(
-                            symbol: "text.viewfinder",
-                            label: OctoshotL10n.ocrAction,
-                            action: wrapAlternate(entry.actions.onOCR)
-                        )
-                        if let onAskAI = entry.actions.onAskAI {
-                            QuickAccessButton(
-                                symbol: "sparkles",
-                                label: OctoshotL10n.quickAccessAskAI,
-                                action: wrapAlternate(onAskAI)
-                            )
-                        }
-                        if let onCopyMarkdown = entry.actions.onCopyMarkdown {
-                            QuickAccessButton(
-                                symbol: "curlybraces.square",
-                                label: OctoshotL10n.quickAccessCopyMarkdown,
-                                action: wrapAlternate(onCopyMarkdown)
-                            )
-                        }
-                        if let onCopyPath = entry.actions.onCopyPath {
-                            QuickAccessButton(
-                                symbol: "link.circle",
-                                label: OctoshotL10n.quickAccessCopyPath,
-                                action: wrapAlternate(onCopyPath)
-                            )
-                        }
-                        QuickAccessButton(
-                            symbol: "xmark.circle.fill",
-                            label: OctoshotL10n.quickAccessClose,
-                            action: onClose
-                        )
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                }
-                .frame(width: 240, height: 52)
-                .background(.ultraThinMaterial, in: Capsule())
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .overlay(alignment: primaryOverlayAlignment) {
-            SpeculativePrimaryButton(
-                phase: speculativeState.phase,
-                onApply: { applySpeculativeResult() }
+    @ViewBuilder
+    private var toolbar: some View {
+        if toolbarStyle == .below {
+            let toolbarFrame = QuickAccessLayout.belowToolbarFrame(
+                for: CGRect(origin: .zero, size: thumbSize), placement: placement
             )
-            .frame(width: 240, height: 36, alignment: primaryOverlayAlignment)
-            .clipped()
-            .offset(y: -44)
+            HStack(spacing: 6) {
+                ForEach(actions.indices, id: \.self) { index in actionButton(index) }
+            }
+            .padding(5)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
+            .fixedSize()
+            .opacity(isHovering ? 1 : 0)
+            .scaleEffect(isHovering ? 1 : 0.92)
+            .position(x: toolbarFrame.midX, y: toolbarFrame.midY)
+            .allowsHitTesting(isHovering)
+            .accessibilityHidden(!isHovering)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82), value: isHovering)
+        } else {
+            GeometryReader { proxy in
+                let cardFrame = proxy.frame(in: .named("quickAccessViewport"))
+                let bounds = CGRect(origin: .zero, size: viewportSize).insetBy(dx: 10, dy: 10)
+                    .offsetBy(dx: -cardFrame.minX, dy: -cardFrame.minY)
+                let geometry = QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: thumbSize),
+                                                       visibleBounds: bounds)
+                QuickAccessRingPalette(diameter: geometry.outerBounds.width, actions: actions)
+                    .frame(width: geometry.outerBounds.width, height: geometry.outerBounds.height)
+                    .opacity(isHovering ? 1 : 0)
+                    .scaleEffect(isHovering || reduceMotion ? 1 : 0.94)
+                    .position(x: thumbSize.width / 2, y: thumbSize.height / 2)
+                    .allowsHitTesting(isHovering)
+                    .accessibilityHidden(!isHovering)
+                    .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8), value: isHovering)
+            }
         }
-        .onHover { isHovering = $0 }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isHovering)
     }
 
-    private var actionOverlayAlignment: Alignment {
-        placement == .bottomLeft || placement == .leftSidebar ? .bottomLeading : .bottomTrailing
-    }
-
-    private var primaryOverlayAlignment: Alignment {
-        placement == .bottomLeft || placement == .leftSidebar ? .topLeading : .topTrailing
-    }
-
-    private var dismissButtonAlignment: Alignment {
-        switch placement {
-        case .bottomLeft, .leftSidebar:
-            return .topLeading
-        case .bottomRight, .rightSidebar:
-            return .topTrailing
+    private func actionButton(_ index: Int) -> some View {
+        Button(action: actions[index].action) {
+            Image(systemName: actions[index].symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: QuickAccessLayout.bubbleDiameter, height: QuickAccessLayout.bubbleDiameter)
+                .contentShape(Circle())
         }
+        .buttonStyle(.plain)
+        .help(actions[index].label)
+        .accessibilityLabel(actions[index].label)
     }
 
     private func wrapAlternate(_ action: @escaping () -> Void) -> () -> Void {
@@ -791,6 +733,82 @@ private struct QuickAccessCard: View {
         }
         onAlternateAction()
         speculativeState.phase = .hidden
+    }
+}
+
+private struct QuickAccessRingShape: Shape {
+    var segment: Int?
+
+    func path(in rect: CGRect) -> Path {
+        let geometry = QuickAccessRingGeometry(imageRect: rect)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let start = segment.map { geometry.centerAngle(for: $0) - geometry.segmentAngle / 2 } ?? 0
+        let end = start + (segment == nil ? 2 * .pi : geometry.segmentAngle)
+        var path = Path()
+        path.addArc(center: center, radius: geometry.outerRadius,
+                    startAngle: .radians(Double(start)), endAngle: .radians(Double(end)), clockwise: false)
+        let innerEnd = geometry.point(at: end, on: geometry.innerBounds)
+        if segment != nil {
+            path.addLine(to: innerEnd)
+        } else {
+            path.closeSubpath()
+            path.move(to: innerEnd)
+        }
+        path.addArc(center: center, radius: geometry.innerRadius,
+                    startAngle: .radians(Double(end)), endAngle: .radians(Double(start)), clockwise: true)
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct QuickAccessRingPalette: View {
+    let diameter: CGFloat
+    let actions: [(symbol: String, label: String, action: () -> Void)]
+    @State private var highlightedSegment: Int?
+
+    private var geometry: QuickAccessRingGeometry {
+        QuickAccessRingGeometry(imageRect: CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter)))
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            QuickAccessRingShape()
+                .fill(.ultraThinMaterial)
+                .opacity(0.72)
+                .overlay { QuickAccessRingShape().stroke(.white.opacity(0.42), lineWidth: 0.75) }
+                .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
+            ForEach(actions.indices, id: \.self) { index in
+                let shape = QuickAccessRingShape(segment: index)
+                Button(action: actions[index].action) {
+                    shape.fill(highlightedSegment == index ? Color.accentColor.opacity(0.32) : .clear)
+                        .overlay(alignment: .topLeading) {
+                            Image(systemName: actions[index].symbol)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .position(geometry.center(for: index))
+                        }
+                        .contentShape(shape)
+                }
+                .buttonStyle(.plain)
+                .help(actions[index].label)
+                .accessibilityLabel(actions[index].label)
+                .accessibilityIdentifier("quick-access-ring-\(index)")
+                Path { path in
+                    let angle = geometry.centerAngle(for: index) - geometry.segmentAngle / 2
+                    path.move(to: geometry.point(at: angle, on: geometry.innerBounds))
+                    path.addLine(to: geometry.point(at: angle, on: geometry.outerBounds))
+                }
+                .stroke(.primary.opacity(0.16), lineWidth: 0.75)
+                .allowsHitTesting(false)
+            }
+        }
+        .contentShape(QuickAccessRingShape())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point): highlightedSegment = geometry.segment(at: point)
+            case .ended: highlightedSegment = nil
+            }
+        }
     }
 }
 
@@ -875,32 +893,6 @@ private struct SpeculativePrimaryButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
         }
-    }
-}
-
-private struct QuickAccessButton: View {
-    let symbol: String
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 22, height: 18)
-                Text(label)
-                    .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(minWidth: 40)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
-        }
-        .buttonStyle(.plain)
-        .help(label)
-        .accessibilityLabel(label)
     }
 }
 
