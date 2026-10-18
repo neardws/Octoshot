@@ -110,6 +110,11 @@ targets:
       - package: Sparkle
         product: Sparkle
     postBuildScripts:
+      - name: Write git commit to built Info.plist
+        script: /bin/bash "${PROJECT_DIR}/Scripts/write-git-commit.sh"
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        basedOnDependencyAnalysis: false
       - name: Embed octoshot CLI in app bundle
         script: |
           set -euo pipefail
@@ -147,6 +152,7 @@ targets:
       PRODUCT_NAME: Octoshot
       PRODUCT_BUNDLE_IDENTIFIER: com.neardws.Octoshot
       INFOPLIST_FILE: Octoshot/Info.plist
+      ENABLE_USER_SCRIPT_SANDBOXING: NO
       CODE_SIGN_ENTITLEMENTS: Octoshot/Octoshot.entitlements
       ENABLE_HARDENED_RUNTIME: YES
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
