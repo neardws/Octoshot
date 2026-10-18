@@ -56,17 +56,39 @@ public enum AgentProcessing {
 }
 
 /// Applies redaction boxes by drawing solid black fills (agent-friendly; no pixelate shader).
+/// Keeps the source's pixel resolution. Candidate rects use a top-left origin, like the detector.
 public enum RedactionCompositor {
     public static func apply(_ candidates: [RedactionCandidate], to image: NSImage) -> NSImage {
         let size = image.size
-        let output = NSImage(size: size)
-        output.lockFocus()
-        image.draw(in: NSRect(origin: .zero, size: size))
-        NSColor.black.setFill()
-        for c in candidates {
-            NSBezierPath(rect: c.rect).fill()
+        guard size.width > 0, size.height > 0,
+              let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        let space = source.colorSpace.flatMap { $0.supportsOutput ? $0 : nil }
+            ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(
+            data: nil,
+            width: source.width,
+            height: source.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return image }
+
+        let scaleX = CGFloat(source.width) / size.width
+        let scaleY = CGFloat(source.height) / size.height
+        context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        for candidate in candidates {
+            // CGContext has a bottom-left origin, so flip each top-left rect.
+            let rect = candidate.rect
+            context.fill(CGRect(
+                x: rect.minX * scaleX,
+                y: (size.height - rect.maxY) * scaleY,
+                width: rect.width * scaleX,
+                height: rect.height * scaleY
+            ))
         }
-        output.unlockFocus()
-        return output
+        guard let output = context.makeImage() else { return image }
+        return NSImage(cgImage: output, size: size)
     }
 }
