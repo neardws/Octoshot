@@ -106,9 +106,9 @@ const en: LandingCopy = {
     labelName: 'Name',
     name: '一酱 (Yijiang)',
     labelSpecies: 'Species',
-    species: 'East Pacific red octopus (Octopus rubescens), cartoon edition',
+    species: 'East Pacific red octopus (Octopus rubescens)',
     speciesFact:
-      'Real-life O. rubescens are small, very curious, and can flush red in a blink. Same here: tiny, nosy, and if you poke me I go full red—then do the job anyway.',
+      'Real-life O. rubescens: small, nosy, and red in a blink. Don’t flatter yourself—the red means you’re bugging me. Job’s still getting done.',
     labelPersonality: 'Personality',
     personality: 'Low-energy, a little grumpy; reliable when it counts',
     labelCatchphrase: 'Catchphrase',
@@ -253,9 +253,9 @@ const zh: LandingCopy = {
     labelName: '名字',
     name: '一酱',
     labelSpecies: '物种',
-    species: '东太平洋红章鱼（Octopus rubescens），卡通版',
+    species: '东太平洋红章鱼（Octopus rubescens）',
     speciesFact:
-      '现实里的东太平洋红章鱼个头小、好奇心重，一激动就能瞬间红透。我也一样：个子小、爱凑热闹，被戳了就整只泛红——红完照样把活干完。',
+      '真·东太平洋红章鱼：个子小、好奇心重，一激动瞬间红透。别多想，红是被你烦的——活我照样干完。',
     labelPersonality: '性格',
     personality: '低能量、略嫌弃；嘴上吐槽，手上靠谱',
     labelCatchphrase: '口头禅',
