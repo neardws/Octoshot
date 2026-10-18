@@ -20,6 +20,8 @@ final class SettingsWindowController: NSWindowController {
 
         let hosting = NSHostingController(rootView: OctoshotSettingsView())
         window.contentViewController = hosting
+        // Keep the window toolbar-free; SwiftUI must not add a toolbar band above the panes.
+        window.toolbar = nil
 
         super.init(window: window)
     }

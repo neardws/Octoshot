@@ -6,47 +6,55 @@ struct OctoshotSettingsView: View {
     @State private var selection: SettingsSection = .general
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                ForEach(SettingsSection.allCases) { section in
-                    NavigationLink(value: section) {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(section.title)
-                                Text(section.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        } icon: {
-                            Image(systemName: section.systemImage)
-                        }
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 4) {
-                    Divider()
-                    Text("Octoshot \(AppVersion.display)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                }
-            }
-        } detail: {
+        // Plain HStack instead of NavigationSplitView: this view is hosted in an AppKit
+        // NSWindow (SettingsWindowController), where NavigationSplitView injects an
+        // NSToolbar with a sidebar toggle and a toolbar-height scroll-edge band over the
+        // detail column. `.toolbar(.hidden, for: .windowToolbar)` only works for SwiftUI
+        // scene windows, so the band covered the top of every pane.
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 260)
+            Divider()
             detailView(for: selection)
+                .id(selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(Color(nsColor: .windowBackgroundColor))
         }
-        .navigationSplitViewStyle(.balanced)
-        .toolbar(.hidden, for: .windowToolbar)
         .frame(minWidth: 780, minHeight: 560)
         .onReceive(NotificationCenter.default.publisher(for: .octoshotOpenSettingsSection)) { note in
             if let section = note.object as? SettingsSection {
                 selection = section
+            }
+        }
+    }
+
+    private var sidebar: some View {
+        List(selection: $selection) {
+            ForEach(SettingsSection.allCases) { section in
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title)
+                        Text(section.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                } icon: {
+                    Image(systemName: section.systemImage)
+                }
+                .tag(section)
+            }
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 4) {
+                Divider()
+                Text("Octoshot \(AppVersion.display)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
             }
         }
     }
