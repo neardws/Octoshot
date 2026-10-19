@@ -14,7 +14,7 @@ const { t } = Astro.props;
     <Reveal>
       <h2 class="h2 text-center">{t.stepsTitle}</h2>
     </Reveal>
-    <ol class="mx-auto mt-14 max-w-narrow space-y-10">
+    <ol class="mx-auto mt-14 max-w-narrow legacy-space-y-10">
       {
         t.steps.map((step, i) => (
           <Reveal delay={i * 70}>

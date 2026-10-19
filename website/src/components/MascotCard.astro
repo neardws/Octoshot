@@ -25,7 +25,7 @@ const rows: { label: string; value: string; fact?: string }[] = [
 ---
 
 <aside
-  class="mascot-card rounded-tile border border-mb-hair bg-mb-tile p-6 text-left shadow-sm md:p-7"
+  class="mascot-card rounded-tile border border-mb-hair bg-mb-tile p-6 text-left shadow-xs md:p-7"
   aria-label={card.ariaLabel}
 >
   <div class="flex items-start gap-4">
@@ -35,7 +35,7 @@ const rows: { label: string; value: string; fact?: string }[] = [
       <p class="mt-1 text-[22px] font-semibold leading-tight text-mb-fg">{card.name}</p>
     </div>
   </div>
-  <dl class="mt-5 space-y-3 text-[15px]">
+  <dl class="mt-5 legacy-space-y-3 text-[15px]">
     {
       rows.slice(1).map((row) => (
         <div>

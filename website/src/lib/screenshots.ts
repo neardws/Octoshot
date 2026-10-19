@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { publicDir } from 'astro:config/server';
 import type { Locale } from '@/i18n/ui';
 
 /** Marketing visual stems (generated — see public/screenshots/README.md). */
@@ -23,10 +24,8 @@ export const GALLERY_SCREENSHOTS: ScreenshotStem[] = [
   'ocr',
 ];
 
-const publicDir = path.join(fileURLToPath(new URL('../..', import.meta.url)), 'public');
-
 function stemPath(locale: Locale, stem: ScreenshotStem, file: string): string {
-  return path.join(publicDir, 'screenshots', locale, file);
+  return path.join(fileURLToPath(publicDir), 'screenshots', locale, file);
 }
 
 export function screenshotExists(locale: Locale, stem: ScreenshotStem): boolean {

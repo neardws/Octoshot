@@ -1,6 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import toc from '../../../Docs/guide/toc.json';
 
 export type GuideLocale = 'en' | 'zh';
 
@@ -11,24 +9,20 @@ export type GuideChapter = {
 
 type TOC = Record<GuideLocale, GuideChapter[]>;
 
-const websiteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const guideRoot = path.resolve(websiteRoot, '../Docs/guide');
-
-function readTOC(): TOC {
-  const raw = fs.readFileSync(path.join(guideRoot, 'toc.json'), 'utf8');
-  return JSON.parse(raw) as TOC;
-}
+const chapters: TOC = toc;
+const markdown = import.meta.glob<string>('../../../Docs/guide/{en,zh}/*.md', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+});
 
 export function getChapters(locale: GuideLocale): GuideChapter[] {
-  return readTOC()[locale] ?? [];
+  return chapters[locale] ?? [];
 }
 
 export function getChapterMarkdown(locale: GuideLocale, id: string): string {
-  const file = path.join(guideRoot, locale, `${id}.md`);
-  if (!fs.existsSync(file)) {
-    return `# Not found\n\nMissing \`${id}.md\` for ${locale}.`;
-  }
-  return fs.readFileSync(file, 'utf8');
+  return markdown[`../../../Docs/guide/${locale}/${id}.md`]
+    ?? `# Not found\n\nMissing \`${id}.md\` for ${locale}.`;
 }
 
 export function getAllChapterParams(locale: GuideLocale): { slug: string }[] {

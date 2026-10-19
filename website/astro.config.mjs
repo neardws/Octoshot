@@ -1,13 +1,13 @@
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
-import tailwind from '@astrojs/tailwind';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   site: 'https://www.neardws.com',
   base: '/Octoshot',
   trailingSlash: 'always',
+  compressHTML: true,
   integrations: [
-    tailwind({ applyBaseStyles: false }),
     sitemap({
       i18n: {
         defaultLocale: 'en',
@@ -15,4 +15,7 @@ export default defineConfig({
       },
     }),
   ],
+  vite: {
+    plugins: [tailwindcss()],
+  },
 });
