@@ -102,7 +102,3 @@ states, open the language menu and FAQ, and check console errors, focus states,
 and hover states against the old build. Static comparison is not a substitute
 for this rendered check. Tailwind v4 also raises browser requirements to Safari
 16.4+, Chrome 111+, and Firefox 128+; very old browsers are outside its support.
-
-The HTTP smoke-test server may remain on `127.0.0.1:4330`: the managed stop
-command reported no running server, while the sandbox denied sending its
-process a termination signal. Stop that local server manually if still running.
