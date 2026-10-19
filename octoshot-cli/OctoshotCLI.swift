@@ -112,47 +112,8 @@ struct OctoshotCLI {
     }
 
     private static func runCapture(_ args: [String]) async throws {
-        var mode: AgentCaptureMode = .fullscreen
-        var displayID: UInt32?
-        var windowID: UInt32?
-        var region: CGRect?
-        var output: URL?
-        var includeBase64 = false
-        var i = 0
-        while i < args.count {
-            switch args[i] {
-            case "--mode":
-                i += 1
-                mode = AgentCaptureMode(rawValue: args[i]) ?? .fullscreen
-            case "--display-id":
-                i += 1
-                displayID = UInt32(args[i])
-            case "--window-id":
-                i += 1
-                windowID = UInt32(args[i])
-            case "--rect":
-                i += 1
-                let parts = args[i].split(separator: ",").compactMap { Double($0) }
-                guard parts.count == 4 else { throw CaptureError.captureFailed("rect needs x,y,w,h") }
-                region = CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
-            case "--output":
-                i += 1
-                output = URL(fileURLWithPath: args[i])
-            case "--base64":
-                includeBase64 = true
-            default:
-                break
-            }
-            i += 1
-        }
-        let result = try await AgentCaptureEngine.capture(options: .init(
-            mode: mode,
-            displayID: displayID,
-            windowID: windowID,
-            region: region,
-            outputPath: output,
-            includeBase64: includeBase64
-        ))
+        let options = try CaptureArgumentParser.parse(args)
+        let result = try await AgentCaptureEngine.capture(options: options)
         printJSON(result)
     }
 
