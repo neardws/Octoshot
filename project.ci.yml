@@ -45,8 +45,6 @@ targets:
     platform: macOS
     sources:
       - path: OctoshotEmbeddedMLX
-    dependencies:
-      - target: OctoshotCore
     settings:
       PRODUCT_NAME: OctoshotEmbeddedMLX
       PRODUCT_BUNDLE_IDENTIFIER: com.neardws.OctoshotEmbeddedMLX

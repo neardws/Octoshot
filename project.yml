@@ -52,7 +52,6 @@ targets:
     sources:
       - path: OctoshotEmbeddedMLX
     dependencies:
-      - target: OctoshotCore
       - package: mlx-swift-lm
         product: MLXVLM
       - package: mlx-swift-lm

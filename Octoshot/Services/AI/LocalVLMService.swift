@@ -15,7 +15,20 @@ final class LocalVLMService: EmbeddedVisionBackend, @unchecked Sendable {
 
     func complete(prompt: String, image: NSImage) async throws -> String {
         guard isReady() else { throw EmbeddedAIError.modelNotInstalled(.smolVLM2_500M_4bit) }
-        return try await MLXVLMLoader.shared.respond(prompt: prompt, image: image)
+        do {
+            return try await MLXVLMLoader.shared.respond(
+                prompt: prompt,
+                image: image,
+                modelDirectory: EmbeddedAIModelPaths.directory(for: .smolVLM2_500M_4bit)
+            )
+        } catch let error as MLXVLMLoaderError {
+            switch error {
+            case .inferenceUnavailableInThisBuild:
+                throw EmbeddedAIError.inferenceUnavailableInThisBuild
+            case .sessionUnavailable, .imageEncodingFailed:
+                throw EmbeddedAIError.backendMissing
+            }
+        }
     }
 
     func stream(prompt: String, image: NSImage) -> AsyncThrowingStream<String, Error> {
