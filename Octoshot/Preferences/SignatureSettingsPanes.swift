@@ -13,19 +13,19 @@ struct RedactionSettingsPane: View {
 
     var body: some View {
         Group {
-            Toggle("Auto-apply when opening Annotate", isOn: $autoRedact)
-            Text("Detection runs on-device with Apple Vision (text + faces).")
+            Toggle(OctoshotL10n.text("Auto-apply when opening Annotate"), isOn: $autoRedact)
+            Text(OctoshotL10n.text("Detection runs on-device with Apple Vision (text + faces)."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Section("Detect") {
-                Toggle("Phone numbers (incl. China mobile)", isOn: $phones)
-                Toggle("Email addresses", isOn: $emails)
-                Toggle("ID card numbers", isOn: $nationalIDs)
-                Toggle("Credit card numbers", isOn: $cards)
-                Toggle("API keys / tokens", isOn: $apiKeys)
-                Toggle("IP addresses", isOn: $ips)
-                Toggle("Faces", isOn: $faces)
+            Section(OctoshotL10n.text("Detect")) {
+                Toggle(OctoshotL10n.text("Phone numbers (incl. China mobile)"), isOn: $phones)
+                Toggle(OctoshotL10n.text("Email addresses"), isOn: $emails)
+                Toggle(OctoshotL10n.text("ID card numbers"), isOn: $nationalIDs)
+                Toggle(OctoshotL10n.text("Credit card numbers"), isOn: $cards)
+                Toggle(OctoshotL10n.text("API keys / tokens"), isOn: $apiKeys)
+                Toggle(OctoshotL10n.text("IP addresses"), isOn: $ips)
+                Toggle(OctoshotL10n.text("Faces"), isOn: $faces)
             }
         }
         .onChange(of: autoRedact) { _, v in AppSettings.shared.autoRedactOnAnnotate = v }

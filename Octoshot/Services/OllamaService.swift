@@ -101,7 +101,7 @@ enum OllamaService {
         var errorDescription: String? {
             switch self {
             case .pullFailed:
-                return "Ollama could not pull the model. Ensure Ollama is running and try `ollama pull qwen2.5vl` in Terminal."
+                return OctoshotL10n.text("Ollama could not pull the model. Ensure Ollama is running and try `ollama pull qwen2.5vl` in Terminal.")
             }
         }
     }

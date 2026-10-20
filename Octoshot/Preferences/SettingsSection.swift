@@ -14,14 +14,14 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .general: return "General"
-        case .shortcuts: return "Shortcuts"
-        case .capture: return "Capture"
-        case .recording: return "Recording"
-        case .annotation: return "Annotation"
-        case .ai: return "AI"
-        case .developer: return "Developer"
-        case .about: return "About"
+        case .general: return OctoshotL10n.text("General")
+        case .shortcuts: return OctoshotL10n.text("Shortcuts")
+        case .capture: return OctoshotL10n.text("Capture")
+        case .recording: return OctoshotL10n.text("Recording")
+        case .annotation: return OctoshotL10n.text("Annotation")
+        case .ai: return OctoshotL10n.text("AI")
+        case .developer: return OctoshotL10n.text("Developer")
+        case .about: return OctoshotL10n.text("About")
         }
     }
 
@@ -40,14 +40,14 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var subtitle: String {
         switch self {
-        case .general: return "Startup, menu bar, and after capture"
-        case .shortcuts: return "Global hotkeys and macOS screenshots"
-        case .capture: return "Save folder, format, and quick access"
-        case .recording: return "Video, GIF, scroll capture, and mode bar"
-        case .annotation: return "Redaction and annotate defaults"
-        case .ai: return "Embedded SmolVLM2, pix2tex, optional Ollama"
-        case .developer: return "Dev tools and Agent CLI"
-        case .about: return "Version and license"
+        case .general: return OctoshotL10n.text("Startup, menu bar, and after capture")
+        case .shortcuts: return OctoshotL10n.text("Global hotkeys and macOS screenshots")
+        case .capture: return OctoshotL10n.text("Save folder, format, and quick access")
+        case .recording: return OctoshotL10n.text("Video, GIF, scroll capture, and mode bar")
+        case .annotation: return OctoshotL10n.text("Redaction and annotate defaults")
+        case .ai: return OctoshotL10n.text("Embedded SmolVLM2, pix2tex, optional Ollama")
+        case .developer: return OctoshotL10n.text("Dev tools and Agent CLI")
+        case .about: return OctoshotL10n.text("Version and license")
         }
     }
 }

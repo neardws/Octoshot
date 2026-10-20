@@ -19,7 +19,7 @@ final class ModelDownloadService {
 
     func download(_ model: EmbeddedModelID) async throws {
         guard active == nil else {
-            throw EmbeddedAIError.downloadFailed("Another download is already in progress.")
+            throw EmbeddedAIError.downloadFailed(OctoshotL10n.text("Another download is already in progress."))
         }
         active = model
         defer { active = nil }
@@ -27,10 +27,10 @@ final class ModelDownloadService {
         let destination = EmbeddedAIModelPaths.directory(for: model)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        postProgress(model, fraction: 0, status: "Listing files…")
+        postProgress(model, fraction: 0, status: OctoshotL10n.text("Listing files…"))
         let files = try await listRemoteFiles(repo: model.huggingFaceRepo, model: model)
         guard !files.isEmpty else {
-            throw EmbeddedAIError.downloadFailed("No files found for \(model.huggingFaceRepo)")
+            throw EmbeddedAIError.downloadFailed(OctoshotL10n.format("No files found for %@", model.huggingFaceRepo))
         }
 
         var completedBytes: Int64 = 0
@@ -46,18 +46,18 @@ final class ModelDownloadService {
                 completedBytes += entry.size ?? 0
                 continue
             }
-            postProgress(model, fraction: Double(completedBytes) / Double(totalBytes), status: "Downloading \(entry.path)…")
+            postProgress(model, fraction: Double(completedBytes) / Double(totalBytes), status: OctoshotL10n.format("Downloading %@…", entry.path))
             try await downloadFile(repo: model.huggingFaceRepo, path: entry.path, to: localURL) { chunk in
                 completedBytes += chunk
                 postProgress(
                     model,
                     fraction: min(1, Double(completedBytes) / Double(totalBytes)),
-                    status: "Downloading \(entry.path)…"
+                    status: OctoshotL10n.format("Downloading %@…", entry.path)
                 )
             }
         }
 
-        postProgress(model, fraction: 1, status: "Download complete")
+        postProgress(model, fraction: 1, status: OctoshotL10n.text("Download complete"))
         if model == .smolVLM2_500M_4bit {
             EmbeddedAISettings.markEmbeddedVLMInstalled()
         }
@@ -68,7 +68,7 @@ final class ModelDownloadService {
         if FileManager.default.fileExists(atPath: dir.path) {
             try FileManager.default.removeItem(at: dir)
         }
-        postProgress(model, fraction: 0, status: "Removed")
+        postProgress(model, fraction: 0, status: OctoshotL10n.text("Removed"))
     }
 
     private func postProgress(_ model: EmbeddedModelID, fraction: Double, status: String) {
@@ -88,7 +88,7 @@ final class ModelDownloadService {
         let url = URL(string: "https://huggingface.co/api/models/\(repo)/tree/main?recursive=1")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw EmbeddedAIError.downloadFailed("Could not list \(repo)")
+            throw EmbeddedAIError.downloadFailed(OctoshotL10n.format("Could not list %@", repo))
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return []
@@ -112,7 +112,7 @@ final class ModelDownloadService {
         let url = URL(string: "https://huggingface.co/\(repo)/resolve/main/\(encoded)")!
         let (tempURL, response) = try await URLSession.shared.download(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw EmbeddedAIError.downloadFailed("HTTP error for \(path)")
+            throw EmbeddedAIError.downloadFailed(OctoshotL10n.format("HTTP error for %@", path))
         }
         let attrs = try FileManager.default.attributesOfItem(atPath: tempURL.path)
         let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0

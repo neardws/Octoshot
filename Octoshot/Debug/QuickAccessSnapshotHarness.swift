@@ -4,6 +4,22 @@ import CoreText
 import SwiftUI
 import OctoshotCore
 
+final class SettingsSnapshotDefaults: UserDefaults, @unchecked Sendable {
+    private var values: [String: Any] = [:]
+
+    override func object(forKey defaultName: String) -> Any? {
+        values[defaultName]
+    }
+
+    override func set(_ value: Any?, forKey defaultName: String) {
+        values[defaultName] = value
+    }
+
+    override func removeObject(forKey defaultName: String) {
+        values.removeValue(forKey: defaultName)
+    }
+}
+
 @MainActor
 enum QuickAccessSnapshotHarness {
     static func runIfRequested() {
@@ -11,6 +27,10 @@ enum QuickAccessSnapshotHarness {
         do {
             let destination = URL(fileURLWithPath: directory, isDirectory: true)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            if OctoshotL10n.isSettingsSnapshot {
+                try renderSettings(to: destination)
+                exit(0)
+            }
             let actions = QuickAccessActions(
                 onCopy: {}, onSave: {}, onAnnotate: {}, onPin: {}, onOCR: {}, onClose: {}
             )
@@ -50,6 +70,41 @@ enum QuickAccessSnapshotHarness {
         } catch {
             FileHandle.standardError.write(Data("Quick Access snapshot failed: \(error)\n".utf8))
             exit(1)
+        }
+    }
+
+    private static func renderSettings(to destination: URL) throws {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        NSApp.appearance = NSAppearance(named: .aqua)
+        AppSettings.shared.format = .jpeg
+        AppSettings.shared.embeddedAIOllamaFallbackEnabled = true
+        for section in SettingsSection.allCases {
+            let size = NSSize(width: 1120, height: 1600)
+            let view = OctoshotSettingsView(selection: section)
+                .environment(\.locale, OctoshotL10n.snapshotLocale)
+                .environment(\.colorScheme, .light)
+                .frame(width: size.width, height: size.height)
+            let hosting = NSHostingView(rootView: view)
+            hosting.appearance = NSAppearance(named: .aqua)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                                  styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = hosting
+            hosting.frame = NSRect(origin: .zero, size: size)
+            hosting.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            hosting.layoutSubtreeIfNeeded()
+            guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try data.write(to: destination.appendingPathComponent("settings-\(section.rawValue).png"))
+            window.contentView = nil
+            window.close()
         }
     }
 
