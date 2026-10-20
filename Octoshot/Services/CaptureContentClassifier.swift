@@ -120,16 +120,18 @@ enum CaptureContentClassifier {
 
     private static func recognizeText(image: NSImage) async -> String? {
         guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        return await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, _ in
-                let strings = (request.results as? [VNRecognizedTextObservation])?
-                    .compactMap { $0.topCandidates(1).first?.string } ?? []
-                continuation.resume(returning: strings.joined(separator: "\n"))
-            }
+        return await Task.detached { () -> String? in
+            let request = VNRecognizeTextRequest()
             request.recognitionLevel = .fast
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-            try? handler.perform([request])
-        }
+            do {
+                try handler.perform([request])
+                let strings = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                return strings.joined(separator: "\n")
+            } catch {
+                return nil
+            }
+        }.value
     }
 }
 
