@@ -10,6 +10,17 @@ struct OctoshotCLI {
             print(OctoshotVersion.semanticVersion())
             return
         }
+        #if DEBUG
+        if args.first == "vlm-bench" {
+            do {
+                try await runVLMBench(Array(args.dropFirst()))
+            } catch {
+                fputs("Error: \(error.localizedDescription)\n", stderr)
+                exit(1)
+            }
+            return
+        }
+        #endif
         UserDefaults.standard.addSuite(named: "com.neardws.Octoshot")
         _ = NSApplication.shared
         if args.isEmpty || args.first == "--help" || args.first == "-h" {
@@ -59,6 +70,9 @@ struct OctoshotCLI {
     }
 
     private static func printUsage() {
+        #if DEBUG
+        print("Developer: vlm-bench --developer --image PATH --prompt TEXT [--max-tokens N] [--repeat K] [--timeout SECONDS]")
+        #endif
         print("""
         octoshot — Octoshot agent CLI (local-only)
 

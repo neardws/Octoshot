@@ -62,6 +62,7 @@ targets:
       - path: OctoshotCoreTests
     dependencies:
       - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
     settings:
       GENERATE_INFOPLIST_FILE: YES
 
@@ -70,8 +71,10 @@ targets:
     platform: macOS
     sources:
       - path: octoshot-cli
+      - path: Octoshot/Services/AI/LocalVLMService.swift
     dependencies:
       - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
     settings:
       PRODUCT_NAME: octoshot
       PRODUCT_BUNDLE_IDENTIFIER: com.neardws.octoshot-cli
