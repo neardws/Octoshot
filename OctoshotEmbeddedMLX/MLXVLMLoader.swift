@@ -19,6 +19,11 @@ public enum MLXVLMLoaderError: Error {
 public enum MLXVLMLoader {
     public static let shared = Loader()
 
+    /// Reuse only the model container: retained sessions carry KV/history across screenshots.
+    /// Bound generation tokens so missing EOS cannot grow the live KV cache indefinitely.
+    /// Clear per-request sessions and temporary PNGs, and unload idle model weights.
+    /// The GPU buffer-cache budget limits reusable buffers, not live tensors or total memory.
+    /// Timeouts and cancellation are cooperative, not a GPU or process kill.
     @MainActor
     public final class Loader {
         #if EMBEDDED_MLX

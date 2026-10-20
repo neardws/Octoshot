@@ -79,10 +79,8 @@ targets:
     platform: macOS
     sources:
       - path: octoshot-cli
-      - path: Octoshot/Services/AI/LocalVLMService.swift
     dependencies:
       - target: OctoshotCore
-      - target: OctoshotEmbeddedMLX
     settings:
       PRODUCT_NAME: octoshot
       PRODUCT_BUNDLE_IDENTIFIER: com.neardws.octoshot-cli
@@ -95,6 +93,22 @@ targets:
         - "@executable_path/.."
         - "@loader_path"
         - "@loader_path/../Frameworks"
+
+  octoshot-vlm-bench:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Tools/vlm-bench
+    dependencies:
+      - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
+    settings:
+      PRODUCT_NAME: octoshot-vlm-bench
+      PRODUCT_BUNDLE_IDENTIFIER: com.neardws.octoshot-vlm-bench
+      SKIP_INSTALL: YES
+      LD_RUNPATH_SEARCH_PATHS:
+        - $(inherited)
+        - "@executable_path"
 
   Octoshot:
     type: application
@@ -182,6 +196,12 @@ schemes:
     build:
       targets:
         octoshot-cli: all
+    run:
+      config: Debug
+  octoshot-vlm-bench:
+    build:
+      targets:
+        octoshot-vlm-bench: all
     run:
       config: Debug
   OctoshotCoreTests:
