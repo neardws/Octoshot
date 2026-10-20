@@ -11,12 +11,12 @@ struct AgentSettingsPane: View {
     var body: some View {
         Group {
             Section {
-                Text("Install the `octoshot` CLI for Terminal, Claude Code, and Cursor MCP. The installer symlinks to the copy embedded in this app.")
+                Text(LocalizedStringKey(OctoshotL10n.text("Install the `octoshot` CLI for Terminal, Claude Code, and Cursor MCP. The installer symlinks to the copy embedded in this app.")))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Text("Install path")
+                    Text(OctoshotL10n.text("Install path"))
                     Spacer()
                     Text(CommandLineToolInstaller.installPath)
                         .font(.system(.body, design: .monospaced))
@@ -26,9 +26,9 @@ struct AgentSettingsPane: View {
                 HStack {
                     Image(systemName: isInstalled ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(isInstalled ? .green : .secondary)
-                    Text(isInstalled ? "Command line tool is installed" : "Not installed at /usr/local/bin/octoshot")
+                    Text(isInstalled ? OctoshotL10n.text("Command line tool is installed") : OctoshotL10n.text("Not installed at /usr/local/bin/octoshot"))
                     Spacer()
-                    Button("Install Command Line Tool") {
+                    Button(OctoshotL10n.text("Install Command Line Tool")) {
                         installCLI()
                     }
                 }
@@ -39,7 +39,7 @@ struct AgentSettingsPane: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Label("Agent / CLI", systemImage: "terminal")
+                Label(OctoshotL10n.text("Agent / CLI"), systemImage: "terminal")
             }
 
             Section {
@@ -50,12 +50,12 @@ struct AgentSettingsPane: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.primary.opacity(0.05))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                Button("Copy MCP JSON") {
+                Button(OctoshotL10n.text("Copy MCP JSON")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(CommandLineToolInstaller.mcpConfigSnippet(), forType: .string)
                 }
             } header: {
-                Label("MCP configuration", systemImage: "curlybraces")
+                Label(OctoshotL10n.text("MCP configuration"), systemImage: "curlybraces")
             }
 
             Section {
@@ -91,16 +91,16 @@ struct AgentSettingsPane: View {
         do {
             let url = try CommandLineToolInstaller.install()
             isInstalled = true
-            installStatus = "Installed at \(url.path)"
+            installStatus = OctoshotL10n.format("Installed at %@", url.path)
         } catch {
             isInstalled = CommandLineToolInstaller.isInstalledCorrectly()
             installStatus = error.localizedDescription
             let alert = NSAlert()
-            alert.messageText = "Could not install octoshot"
+            alert.messageText = OctoshotL10n.text("Could not install octoshot")
             alert.informativeText = """
             \(error.localizedDescription)
 
-            You may need to run once with administrator privileges, for example:
+            \(OctoshotL10n.text("You may need to run once with administrator privileges, for example:"))
             sudo ln -sf "\(CommandLineToolInstaller.bundledToolURL()?.path ?? "…/Octoshot.app/Contents/Helpers/octoshot")" /usr/local/bin/octoshot
             """
             alert.runModal()

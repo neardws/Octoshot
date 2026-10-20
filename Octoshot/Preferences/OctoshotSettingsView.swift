@@ -5,6 +5,10 @@ import OctoshotCore
 struct OctoshotSettingsView: View {
     @State private var selection: SettingsSection = .general
 
+    init(selection: SettingsSection = .general) {
+        _selection = State(initialValue: selection)
+    }
+
     var body: some View {
         // Plain HStack instead of NavigationSplitView: this view is hosted in an AppKit
         // NSWindow (SettingsWindowController), where NavigationSplitView injects an
@@ -49,7 +53,7 @@ struct OctoshotSettingsView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 4) {
                 Divider()
-                Text("Octoshot \(AppVersion.display)")
+                Text(OctoshotL10n.format("Octoshot %@", AppVersion.display))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,52 +94,53 @@ private struct GeneralSettingsPane: View {
     @State private var isCheckingPermission = false
 
     private var hasAccess: Bool {
-        accessCache.lastKnownGranted ?? PermissionManager.legacyPreflightAccess
+        if OctoshotL10n.isSettingsSnapshot { return false }
+        return accessCache.lastKnownGranted ?? PermissionManager.legacyPreflightAccess
     }
 
     var body: some View {
         SettingsFormContainer {
             SettingsPaneHeader(
-                title: "General",
-                subtitle: "Startup, menu bar, capture behavior, and privacy",
+                title: OctoshotL10n.text("General"),
+                subtitle: OctoshotL10n.text("Startup, menu bar, capture behavior, and privacy"),
                 systemImage: "gearshape"
             )
 
             Section {
-                Toggle("Launch Octoshot at login", isOn: $settings.launchAtLogin)
-                Toggle("Show menu bar icon", isOn: $settings.showMenuBarIcon)
-                Toggle("Play sound after capture", isOn: $settings.playCaptureSound)
+                Toggle(OctoshotL10n.text("Launch Octoshot at login"), isOn: $settings.launchAtLogin)
+                Toggle(OctoshotL10n.text("Show menu bar icon"), isOn: $settings.showMenuBarIcon)
+                Toggle(OctoshotL10n.text("Play sound after capture"), isOn: $settings.playCaptureSound)
             } header: {
-                Label("App", systemImage: "app")
+                Label(OctoshotL10n.text("App"), systemImage: "app")
             }
 
             Section {
-                Toggle("Show quick-access panel", isOn: $settings.afterCaptureShowQuickAccess)
-                Toggle("Copy to clipboard", isOn: $settings.afterCaptureCopyToClipboard)
-                Toggle("Save to disk", isOn: $settings.afterCaptureSaveToDisk)
-                Text("If quick access is off, you can still copy or save using the toggles above.")
+                Toggle(OctoshotL10n.text("Show quick-access panel"), isOn: $settings.afterCaptureShowQuickAccess)
+                Toggle(OctoshotL10n.text("Copy to clipboard"), isOn: $settings.afterCaptureCopyToClipboard)
+                Toggle(OctoshotL10n.text("Save to disk"), isOn: $settings.afterCaptureSaveToDisk)
+                Text(OctoshotL10n.text("If quick access is off, you can still copy or save using the toggles above."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Label("After capture", systemImage: "sparkles")
+                Label(OctoshotL10n.text("After capture"), systemImage: "sparkles")
             }
 
             Section {
                 HStack {
                     Image(systemName: hasAccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .foregroundStyle(hasAccess ? .green : .orange)
-                    Text(hasAccess ? "Screen Recording enabled" : "Screen Recording required")
+                    Text(hasAccess ? OctoshotL10n.text("Screen Recording enabled") : OctoshotL10n.text("Screen Recording required"))
                     Spacer()
-                    Button(isCheckingPermission ? "Checking…" : "Refresh") {
+                    Button(isCheckingPermission ? OctoshotL10n.text("Checking…") : OctoshotL10n.text("Refresh")) {
                         Task { await refreshPermission() }
                     }
                     .disabled(isCheckingPermission)
                 }
-                Button("Open System Settings") {
+                Button(OctoshotL10n.text("Open System Settings")) {
                     PermissionManager.openScreenRecordingSettings()
                 }
             } header: {
-                Label("Privacy", systemImage: "lock.shield")
+                Label(OctoshotL10n.text("Privacy"), systemImage: "lock.shield")
             }
         }
         .task { await refreshPermission() }
@@ -143,6 +148,7 @@ private struct GeneralSettingsPane: View {
 
     @MainActor
     private func refreshPermission() async {
+        guard !OctoshotL10n.isSettingsSnapshot else { return }
         isCheckingPermission = true
         let granted = await PermissionManager.refreshAccessStatus()
         accessCache.lastKnownGranted = granted
@@ -158,39 +164,39 @@ private struct CaptureSettingsPane: View {
     var body: some View {
         SettingsFormContainer {
             SettingsPaneHeader(
-                title: "Capture",
-                subtitle: "Where captures go and how the quick-access panel behaves",
+                title: OctoshotL10n.text("Capture"),
+                subtitle: OctoshotL10n.text("Where captures go and how the quick-access panel behaves"),
                 systemImage: "camera.viewfinder"
             )
 
             Section {
-                Toggle("Include window shadow in window capture", isOn: $settings.captureWindowWithShadow)
-                Toggle("Show pointer in screenshots", isOn: $settings.captureShowCursor)
+                Toggle(OctoshotL10n.text("Include window shadow in window capture"), isOn: $settings.captureWindowWithShadow)
+                Toggle(OctoshotL10n.text("Show pointer in screenshots"), isOn: $settings.captureShowCursor)
                 HStack {
-                    Text("Save folder")
+                    Text(OctoshotL10n.text("Save folder"))
                     Spacer()
                     Text(settings.saveDirectory.path)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .foregroundStyle(.secondary)
-                    Button("Choose…") { chooseSaveFolder() }
+                    Button(OctoshotL10n.text("Choose…")) { chooseSaveFolder() }
                 }
-                Picker("Format", selection: $settings.format) {
+                Picker(OctoshotL10n.text("Format"), selection: $settings.format) {
                     ForEach(ScreenshotFormat.allCases) { format in
                         Text(format.displayName).tag(format)
                     }
                 }
                 if settings.format == .jpeg {
                     Slider(value: $settings.jpegQuality, in: 0.5...1.0) {
-                        Text("JPEG quality")
+                        Text(OctoshotL10n.text("JPEG quality"))
                     }
                 }
-                TextField("Filename pattern", text: $settings.filenamePattern)
-                Text("Tokens: {prefix}, {date}, {time}, {datetime}")
+                TextField(OctoshotL10n.text("Filename pattern"), text: $settings.filenamePattern)
+                Text(OctoshotL10n.text("Tokens: {prefix}, {date}, {time}, {datetime}"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Label("Output", systemImage: "folder")
+                Label(OctoshotL10n.text("Output"), systemImage: "folder")
             }
 
             Section {
@@ -205,35 +211,35 @@ private struct CaptureSettingsPane: View {
                     Text(OctoshotL10n.quickAccessToolbarRing).tag(QuickAccessToolbarStyle.bubbles)
                 }
                 HStack {
-                    Text("Auto-close delay")
+                    Text(OctoshotL10n.text("Auto-close delay"))
                     Slider(value: $settings.quickAccessAutoCloseSeconds, in: 0...120, step: 5)
-                    Text(settings.quickAccessAutoCloseSeconds == 0 ? "Off" : "\(Int(settings.quickAccessAutoCloseSeconds))s")
+                    Text(settings.quickAccessAutoCloseSeconds == 0 ? OctoshotL10n.text("Off") : OctoshotL10n.format("%ds", Int(settings.quickAccessAutoCloseSeconds)))
                         .monospacedDigit()
                         .frame(width: 44, alignment: .trailing)
                 }
             } header: {
-                Label("Quick access", systemImage: "photo.on.rectangle.angled")
+                Label(OctoshotL10n.text("Quick access"), systemImage: "photo.on.rectangle.angled")
             }
 
             Section {
-                Toggle("Speculative smart actions", isOn: speculativeEnabledBinding)
-                Text("After capture, classify on-device and pre-run the top suggested action in the background. Results are never copied until you tap Apply.")
+                Toggle(OctoshotL10n.text("Speculative smart actions"), isOn: speculativeEnabledBinding)
+                Text(OctoshotL10n.text("After capture, classify on-device and pre-run the top suggested action in the background. Results are never copied until you tap Apply."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if speculativeEnabledBinding.wrappedValue {
                     HStack {
-                        Text("Confidence threshold")
+                        Text(OctoshotL10n.text("Confidence threshold"))
                         Slider(value: speculativeThresholdBinding, in: 0.25...0.85, step: 0.05)
                         Text("\(Int(speculativeThresholdBinding.wrappedValue * 100))%")
                             .monospacedDigit()
                             .frame(width: 40, alignment: .trailing)
                     }
-                    Text("LaTeX uses pix2tex then SmolVLM2; tables use SmolVLM2. Redaction and OCR stay on Apple Vision.")
+                    Text(OctoshotL10n.text("LaTeX uses pix2tex then SmolVLM2; tables use SmolVLM2. Redaction and OCR stay on Apple Vision."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Label("Smart actions", systemImage: "sparkles")
+                Label(OctoshotL10n.text("Smart actions"), systemImage: "sparkles")
             }
         }
     }
@@ -270,8 +276,8 @@ private struct AnnotationSettingsPane: View {
     var body: some View {
         SettingsFormContainer {
             SettingsPaneHeader(
-                title: "Annotation",
-                subtitle: "On-device redaction before you share a screenshot",
+                title: OctoshotL10n.text("Annotation"),
+                subtitle: OctoshotL10n.text("On-device redaction before you share a screenshot"),
                 systemImage: "pencil.and.outline"
             )
             RedactionSettingsPane()
@@ -287,19 +293,19 @@ struct DeveloperSettingsPane: View {
     var body: some View {
         SettingsFormContainer {
             SettingsPaneHeader(
-                title: "Developer",
-                subtitle: "Power-user tools and Agent / CLI install for MCP",
+                title: OctoshotL10n.text("Developer"),
+                subtitle: OctoshotL10n.text("Power-user tools and Agent / CLI install for MCP"),
                 systemImage: "hammer"
             )
 
             Section {
-                Toggle("Developer mode", isOn: $settings.developerModeEnabled)
-                Toggle("Use absolute path in Markdown snippets", isOn: $settings.markdownImageUseAbsolutePath)
-                Text("Developer mode adds color picking during area capture, a ruler in Annotate, and Markdown/path copy actions.")
+                Toggle(OctoshotL10n.text("Developer mode"), isOn: $settings.developerModeEnabled)
+                Toggle(OctoshotL10n.text("Use absolute path in Markdown snippets"), isOn: $settings.markdownImageUseAbsolutePath)
+                Text(OctoshotL10n.text("Developer mode adds color picking during area capture, a ruler in Annotate, and Markdown/path copy actions."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Label("Tools", systemImage: "wrench.and.screwdriver")
+                Label(OctoshotL10n.text("Tools"), systemImage: "wrench.and.screwdriver")
             }
 
             AgentSettingsPane()
@@ -316,23 +322,23 @@ private struct AboutSettingsPane: View {
                 .resizable()
                 .frame(width: 72, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-            Text("Octoshot")
+            Text(OctoshotL10n.text("Octoshot"))
                 .font(.title.bold())
-            Text("Version \(AppVersion.display)")
+            Text(OctoshotL10n.format("Version %@", AppVersion.display))
                 .foregroundStyle(.secondary)
-            Link("View on GitHub", destination: AppSettings.repositoryURL)
+            Link(OctoshotL10n.text("View on GitHub"), destination: AppSettings.repositoryURL)
             Button(OctoshotL10n.checkForUpdates) {
                 Updater.shared.checkForUpdates()
             }
             .buttonStyle(.bordered)
-            Button("Open User Guide") {
+            Button(OctoshotL10n.text("Open User Guide")) {
                 HelpOpener.open()
             }
             .buttonStyle(.bordered)
-            Text("Released under the MIT License.")
+            Text(OctoshotL10n.text("Released under the MIT License."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("Embedded AI weights: SmolVLM2 (Apache-2.0, mlx-community) and pix2tex-mfr GGUF (MIT, cstr). MLX Swift LM is Apache-2.0.")
+            Text(OctoshotL10n.text("Embedded AI weights: SmolVLM2 (Apache-2.0, mlx-community) and pix2tex-mfr GGUF (MIT, cstr). MLX Swift LM is Apache-2.0."))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

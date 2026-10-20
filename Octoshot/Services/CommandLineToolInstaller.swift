@@ -74,7 +74,7 @@ enum CommandLineToolInstaller {
         var errorDescription: String? {
             switch self {
             case .bundledToolMissing:
-                return "The octoshot command-line tool was not found inside this app bundle. Rebuild Octoshot from Xcode."
+                return OctoshotL10n.text("The octoshot command-line tool was not found inside this app bundle. Rebuild Octoshot from Xcode.")
             }
         }
     }

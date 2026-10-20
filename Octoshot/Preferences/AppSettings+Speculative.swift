@@ -7,16 +7,16 @@ extension AppSettings {
     }
 
     var speculativePostProcessingEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: SpeculativeKeys.enabled) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: SpeculativeKeys.enabled) }
+        get { AppSettings.defaults.object(forKey: SpeculativeKeys.enabled) as? Bool ?? true }
+        set { AppSettings.defaults.set(newValue, forKey: SpeculativeKeys.enabled) }
     }
 
     /// Minimum normalized confidence (0…1) to run background post-processing.
     var speculativeConfidenceThreshold: Double {
         get {
-            let v = UserDefaults.standard.double(forKey: SpeculativeKeys.confidenceThreshold)
+            let v = AppSettings.defaults.double(forKey: SpeculativeKeys.confidenceThreshold)
             return v > 0 ? v : 0.45
         }
-        set { UserDefaults.standard.set(newValue, forKey: SpeculativeKeys.confidenceThreshold) }
+        set { AppSettings.defaults.set(newValue, forKey: SpeculativeKeys.confidenceThreshold) }
     }
 }

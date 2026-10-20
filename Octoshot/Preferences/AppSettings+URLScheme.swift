@@ -10,16 +10,16 @@ extension AppSettings {
     /// How `octoshot://` requests from other apps are handled. Defaults to asking.
     var urlSchemePolicy: URLSchemeAutomationPolicy {
         get {
-            let policy = UserDefaults.standard.string(forKey: URLSchemeKeys.policy)
+            let policy = AppSettings.defaults.string(forKey: URLSchemeKeys.policy)
                 .flatMap(URLSchemeAutomationPolicy.init(rawValue:)) ?? .ask
             return policy == .allow ? .ask : policy
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: URLSchemeKeys.policy) }
+        set { AppSettings.defaults.set(newValue.rawValue, forKey: URLSchemeKeys.policy) }
     }
 
     /// Signed requirements for remembered callers. Legacy string-only entries are never trusted.
     var urlSchemeTrustedCallers: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: "urlSchemeSignedCallers") as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: "urlSchemeSignedCallers") }
+        get { AppSettings.defaults.dictionary(forKey: "urlSchemeSignedCallers") as? [String: String] ?? [:] }
+        set { AppSettings.defaults.set(newValue, forKey: "urlSchemeSignedCallers") }
     }
 }

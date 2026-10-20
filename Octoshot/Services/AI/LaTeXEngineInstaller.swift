@@ -35,7 +35,7 @@ final class LaTeXEngineInstaller {
         let url = URL(string: "https://github.com/ggml-org/llama.cpp/releases/download/\(Self.releaseTag)/\(tarball)")!
         let (archiveURL, response) = try await URLSession.shared.download(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw EmbeddedAIError.specialistFailed("Could not download llama.cpp runtime")
+            throw EmbeddedAIError.specialistFailed(OctoshotL10n.text("Could not download llama.cpp runtime"))
         }
 
         let extractRoot = FileManager.default.temporaryDirectory.appendingPathComponent("octoshot-llama-\(UUID().uuidString)")
@@ -48,11 +48,11 @@ final class LaTeXEngineInstaller {
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            throw EmbeddedAIError.specialistFailed("Failed to extract llama.cpp archive")
+            throw EmbeddedAIError.specialistFailed(OctoshotL10n.text("Failed to extract llama.cpp archive"))
         }
 
         guard let cli = findCLI(in: extractRoot) else {
-            throw EmbeddedAIError.specialistFailed("llama-mtmd-cli missing from archive")
+            throw EmbeddedAIError.specialistFailed(OctoshotL10n.text("llama-mtmd-cli missing from archive"))
         }
 
         let binDir = dest.deletingLastPathComponent()

@@ -52,10 +52,10 @@ enum HotkeyFormatter {
         case kVK_ANSI_X: return "X"
         case kVK_ANSI_Y: return "Y"
         case kVK_ANSI_Z: return "Z"
-        case kVK_Space: return "Space"
+        case kVK_Space: return OctoshotL10n.text("Space")
         case kVK_Return: return "↩"
         case kVK_Escape: return "⎋"
-        default: return "Key \(keyCode)"
+        default: return OctoshotL10n.format("Key %d", Int(keyCode))
         }
     }
 

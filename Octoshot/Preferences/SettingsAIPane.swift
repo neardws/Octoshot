@@ -10,8 +10,9 @@ struct SettingsAIPane: View {
     @State private var latexPrompt = ""
     @State private var clipsPath = ""
     @State private var ollamaModels: [OllamaModel] = []
-    @State private var ollamaStatus = "Not checked"
+    @State private var ollamaStatus = OctoshotL10n.text("Not checked")
     @State private var isChecking = false
+    @State private var ollamaReachable = false
     @State private var isPulling = false
     @State private var pullStatus = ""
     @State private var downloadStatus: [EmbeddedModelID: String] = [:]
@@ -21,64 +22,64 @@ struct SettingsAIPane: View {
     var body: some View {
         SettingsFormContainer {
             SettingsPaneHeader(
-                title: "AI",
-                subtitle: "On-device SmolVLM2 + pix2tex LaTeX specialist; optional Ollama fallback",
+                title: OctoshotL10n.text("AI"),
+                subtitle: OctoshotL10n.text("On-device SmolVLM2 + pix2tex LaTeX specialist; optional Ollama fallback"),
                 systemImage: "brain"
             )
 
             Section {
-                Toggle("Use on-device vision model (SmolVLM2)", isOn: $settings.embeddedAIUseOnDeviceVLM)
+                Toggle(OctoshotL10n.text("Use on-device vision model (SmolVLM2)"), isOn: $settings.embeddedAIUseOnDeviceVLM)
                 modelRow(.smolVLM2_500M_4bit)
                 modelRow(.pix2texMFR_Q4)
                 HStack {
-                    Text("LaTeX runtime (llama-mtmd-cli)")
+                    Text(OctoshotL10n.text("LaTeX runtime (llama-mtmd-cli)"))
                     Spacer()
                     if Pix2TexLlamaRunner.llamaMtmdCLI() != nil {
-                        Text("Ready").foregroundStyle(.green).font(.caption)
+                        Text(OctoshotL10n.text("Ready")).foregroundStyle(.green).font(.caption)
                     } else {
-                        Button("Install") {
+                        Button(OctoshotL10n.text("Install")) {
                             Task {
                                 do {
                                     _ = try await LaTeXEngineInstaller.shared.ensureCLI()
                                 } catch {
-                                    downloadStatus[.pix2texMFR_Q4] = error.localizedDescription
+                                    downloadStatus[.pix2texMFR_Q4] = OctoshotL10n.settingsError(error)
                                 }
                             }
                         }
                     }
                 }
-                Text("Weights download to \(EmbeddedAIModelPaths.modelsRoot().path) and are never bundled in the app.")
+                Text(OctoshotL10n.format("Weights download to %@ and are never bundled in the app.", EmbeddedAIModelPaths.modelsRoot().path))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Label("Embedded models", systemImage: "internaldrive")
+                Label(OctoshotL10n.text("Embedded models"), systemImage: "internaldrive")
             }
 
             Section {
-                Toggle("Ollama fallback (OpenAI-compatible)", isOn: $settings.embeddedAIOllamaFallbackEnabled)
+                Toggle(OctoshotL10n.text("Ollama fallback (OpenAI-compatible)"), isOn: $settings.embeddedAIOllamaFallbackEnabled)
                 HStack {
                     Circle()
                         .fill(ollamaReachable ? Color.green : Color.orange)
                         .frame(width: 8, height: 8)
                     Text(ollamaStatus)
                     Spacer()
-                    Button(isChecking ? "Checking…" : "Test Ollama") {
+                    Button(isChecking ? OctoshotL10n.text("Checking…") : OctoshotL10n.text("Test Ollama")) {
                         Task { await refreshOllama() }
                     }
                     .disabled(isChecking)
                 }
                 if settings.embeddedAIOllamaFallbackEnabled {
-                    TextField("Base URL", text: $baseURL)
-                    TextField("Vision model", text: $model)
-                    SecureField("API key (optional)", text: $apiKey)
+                    TextField(OctoshotL10n.text("Base URL"), text: $baseURL)
+                    TextField(OctoshotL10n.text("Vision model"), text: $model)
+                    SecureField(OctoshotL10n.text("API key (optional)"), text: $apiKey)
                     if !ollamaModels.isEmpty {
-                        Picker("Installed models", selection: $model) {
+                        Picker(OctoshotL10n.text("Installed models"), selection: $model) {
                             ForEach(ollamaModels) { m in
                                 Text(m.name).tag(m.name)
                             }
                         }
                     }
-                    Button(isPulling ? "Pulling…" : "Pull qwen2.5vl") {
+                    Button(isPulling ? OctoshotL10n.text("Pulling…") : OctoshotL10n.text("Pull qwen2.5vl")) {
                         Task { await pullRecommended() }
                     }
                     .disabled(isPulling)
@@ -86,22 +87,22 @@ struct SettingsAIPane: View {
                         Text(pullStatus).font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("Enable only if you want cloud-free Ollama when embedded models are missing or MLX is unavailable.")
+                    Text(OctoshotL10n.text("Enable only if you want cloud-free Ollama when embedded models are missing or MLX is unavailable."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Label("Ollama (optional)", systemImage: "server.rack")
+                Label(OctoshotL10n.text("Ollama (optional)"), systemImage: "server.rack")
             }
 
             Section {
-                TextField("LaTeX prompt (VLM fallback)", text: $latexPrompt, axis: .vertical)
+                TextField(OctoshotL10n.text("LaTeX prompt (VLM fallback)"), text: $latexPrompt, axis: .vertical)
                     .lineLimit(3...6)
-                Text("Formula mode uses pix2tex-mfr first, then SmolVLM2, then Ollama if enabled.")
+                Text(OctoshotL10n.text("Formula mode uses pix2tex-mfr first, then SmolVLM2, then Ollama if enabled."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Label("LaTeX", systemImage: "function")
+                Label(OctoshotL10n.text("LaTeX"), systemImage: "function")
             }
 
             Section {
@@ -109,10 +110,10 @@ struct SettingsAIPane: View {
                     Text(clipsPath)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Button("Choose…") { chooseClipsFolder() }
+                    Button(OctoshotL10n.text("Choose…")) { chooseClipsFolder() }
                 }
             } header: {
-                Label("Clips library", systemImage: "photo.stack")
+                Label(OctoshotL10n.text("Clips library"), systemImage: "photo.stack")
             }
         }
         .onAppear(perform: loadFields)
@@ -135,7 +136,7 @@ struct SettingsAIPane: View {
             HStack {
                 Image(systemName: installed ? "checkmark.circle.fill" : "arrow.down.circle")
                     .foregroundStyle(installed ? .green : .secondary)
-                Text(id.displayName)
+                Text(OctoshotL10n.modelName(id))
                 Spacer()
                 Text(installed ? byteString(bytes) : "~\(id.approximateSizeMB) MB")
                     .font(.caption)
@@ -146,17 +147,17 @@ struct SettingsAIPane: View {
                 Text(status).font(.caption2).foregroundStyle(.secondary)
             }
             HStack {
-                Button(downloading == id ? "Downloading…" : (installed ? "Re-download" : "Download")) {
+                Button(downloading == id ? OctoshotL10n.text("Downloading…") : (installed ? OctoshotL10n.text("Re-download") : OctoshotL10n.text("Download"))) {
                     Task { await downloadModel(id) }
                 }
                 .disabled(downloading != nil)
                 if installed {
-                    Button("Delete") {
+                    Button(OctoshotL10n.text("Delete")) {
                         try? ModelDownloadService.shared.delete(id)
                     }
                 }
             }
-            Text(id.licenseNote).font(.caption2).foregroundStyle(.secondary)
+            Text(OctoshotL10n.modelLicense(id)).font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
     }
@@ -167,52 +168,54 @@ struct SettingsAIPane: View {
         return formatter.string(fromByteCount: bytes)
     }
 
-    private var ollamaReachable: Bool {
-        ollamaStatus.contains("Connected")
-    }
-
     private func loadFields() {
         baseURL = settings.aiBaseURL.absoluteString
         model = settings.aiVisionModel
         apiKey = settings.aiAPIKey
-        latexPrompt = settings.aiLatexPrompt
+        latexPrompt = settings.aiLatexPrompt == AIPrompts.latex ? OctoshotL10n.latexDefaultPrompt : settings.aiLatexPrompt
         clipsPath = settings.clipsLibraryDirectory.path
-        Task { await refreshOllama() }
+        if !OctoshotL10n.isSettingsSnapshot {
+            Task { await refreshOllama() }
+        }
     }
 
     private func persist() {
+        guard !OctoshotL10n.isSettingsSnapshot else { return }
         if let url = URL(string: baseURL) { settings.aiBaseURL = url }
         settings.aiVisionModel = model
         settings.aiAPIKey = apiKey
-        settings.aiLatexPrompt = latexPrompt
+        settings.aiLatexPrompt = latexPrompt == OctoshotL10n.latexDefaultPrompt ? AIPrompts.latex : latexPrompt
     }
 
     @MainActor
     private func downloadModel(_ id: EmbeddedModelID) async {
         downloading = id
-        downloadStatus[id] = "Starting…"
+        downloadStatus[id] = OctoshotL10n.text("Starting…")
         do {
             try await ModelDownloadService.shared.download(id)
-            downloadStatus[id] = "Ready"
+            downloadStatus[id] = OctoshotL10n.text("Ready")
         } catch {
-            downloadStatus[id] = error.localizedDescription
+            downloadStatus[id] = OctoshotL10n.settingsError(error)
             downloading = nil
         }
     }
 
     @MainActor
     private func refreshOllama() async {
+        guard !OctoshotL10n.isSettingsSnapshot else { return }
         isChecking = true
         defer { isChecking = false }
         persist()
         if let models = await OllamaService.listModels(baseURL: settings.aiBaseURL) {
+            ollamaReachable = true
             ollamaModels = models
             ollamaStatus = models.isEmpty
-                ? "Connected to Ollama — no models yet."
-                : "Connected — \(models.count) model(s)."
+                ? OctoshotL10n.text("Connected to Ollama — no models yet.")
+                : OctoshotL10n.format("Connected — %d model(s).", models.count)
         } else {
+            ollamaReachable = false
             ollamaModels = []
-            ollamaStatus = "Ollama not reachable."
+            ollamaStatus = OctoshotL10n.text("Ollama not reachable.")
         }
     }
 
@@ -223,11 +226,11 @@ struct SettingsAIPane: View {
         defer { isPulling = false }
         do {
             try await OllamaService.pullModel("qwen2.5vl", baseURL: settings.aiBaseURL) { status in
-                Task { @MainActor in pullStatus = status }
+                Task { @MainActor in pullStatus = OctoshotL10n.ollamaPullStatus(status) }
             }
             model = "qwen2.5vl:latest"
             settings.aiVisionModel = model
-            pullStatus = "Pull finished."
+            pullStatus = OctoshotL10n.text("Pull finished.")
             await refreshOllama()
         } catch {
             pullStatus = error.localizedDescription

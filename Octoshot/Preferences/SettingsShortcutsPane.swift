@@ -89,7 +89,7 @@ struct SettingsShortcutsPane: View {
                     confirmDisableSystemHotkeys()
                 }
 
-                if SystemScreenshotHotkeys.hasBackup {
+                if !OctoshotL10n.isSettingsSnapshot && SystemScreenshotHotkeys.hasBackup {
                     Button(OctoshotL10n.systemHotkeyRestore) {
                         restoreSystemHotkeys()
                     }
