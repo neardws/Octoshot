@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 import OctoshotCore
 
 final class AreaSelectionController: NSResponder {
@@ -18,16 +19,25 @@ final class AreaSelectionController: NSResponder {
     private(set) var lastMouseGlobal: NSPoint = NSEvent.mouseLocation
     private(set) var lastSampledColor: ScreenColorInfo?
     private(set) var colorCopyHint: String?
+    /// One still image per display, taken as selection starts, so the loupe and color picker
+    /// read the real screen instead of the dimmed overlay drawn on top of it.
+    private(set) var frozenFrames: [CGDirectDisplayID: CGImage] = [:]
+    private var freezeTask: Task<Void, Never>?
+    private var selectionFrame: CGRect?
 
-    func begin() {
+    func begin(displayID: UInt32? = nil, mode: AreaCaptureMode? = nil) {
         end()
+        if let mode { captureMode = mode }
         lastMouseGlobal = NSEvent.mouseLocation
-        for screen in NSScreen.screens {
+        let screens = NSScreen.screens.filter { displayID == nil || $0.displayID == displayID }
+        selectionFrame = displayID == nil ? nil : screens.first?.frame
+        for screen in screens {
             let window = AreaOverlayWindow(screen: screen)
             window.controller = self
             overlayWindows.append(window)
         }
         FullScreenOverlaySupport.presentCaptureOverlays(overlayWindows)
+        freezeFrames(displayIDs: Set(screens.map(\.displayID)))
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDragged]) { [weak self] event in
             guard let self else { return event }
@@ -82,12 +92,40 @@ final class AreaSelectionController: NSResponder {
         redrawAll()
     }
 
+    /// Captures each display without Octoshot's overlays, the one under the mouse first.
+    /// The overlays are already up, so this runs in the background and the loupe appears
+    /// once its display's frame arrives.
+    private func freezeFrames(displayIDs: Set<UInt32>) {
+        freezeTask = Task { @MainActor [weak self] in
+            guard let content = try? await ScreenCaptureService.shared.shareableContent() else { return }
+            let first = ScreenCaptureService.displayUnderMouse(in: content)?.displayID
+            let displays = content.displays.filter { $0.displayID == first }
+                + content.displays.filter { $0.displayID != first }
+            for display in displays where displayIDs.contains(display.displayID) {
+                guard let image = try? await ScreenCaptureService.shared.captureDisplayImage(display, content: content, showsCursor: AppSettings.shared.captureShowCursor),
+                      let self, !Task.isCancelled
+                else { return }
+                self.frozenFrames[display.displayID] = image
+                self.refreshSampledColorIfNeeded()
+                self.redrawAll()
+            }
+        }
+    }
+
+    /// Frozen frame and frame of the screen containing `point`, if that frame has arrived.
+    func frozenFrame(at point: NSPoint) -> (image: CGImage, screenFrame: CGRect)? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }),
+              let image = frozenFrames[screen.displayID]
+        else { return nil }
+        return (image, screen.frame)
+    }
+
     func refreshSampledColorIfNeeded() {
-        guard AppSettings.shared.developerModeEnabled else {
+        guard AppSettings.shared.developerModeEnabled, let frame = frozenFrame(at: lastMouseGlobal) else {
             lastSampledColor = nil
             return
         }
-        lastSampledColor = ScreenColorSampler.sample(at: lastMouseGlobal)
+        lastSampledColor = ScreenColorSampler.sample(at: lastMouseGlobal, screenFrame: frame.screenFrame, in: frame.image)
     }
 
     func copyColorUnderCursor() {
@@ -122,9 +160,10 @@ final class AreaSelectionController: NSResponder {
             cancel()
             return
         }
-        let rect = DisplayGeometry.normalizedSelection(from: start, to: point)
+        var rect = DisplayGeometry.normalizedSelection(from: start, to: point)
+        if let selectionFrame { rect = rect.intersection(selectionFrame) }
         end()
-        if rect.width >= 2, rect.height >= 2 {
+        if !rect.isNull, rect.width.isFinite, rect.height.isFinite, rect.width >= 2, rect.height >= 2 {
             if AppSettings.shared.rememberAreaCaptureMode {
                 AppSettings.shared.lastAreaCaptureMode = captureMode
             }
@@ -174,6 +213,9 @@ final class AreaSelectionController: NSResponder {
         globalMouseMonitor = nil
         overlayWindows.forEach { $0.orderOut(nil) }
         overlayWindows.removeAll()
+        freezeTask?.cancel()
+        freezeTask = nil
+        frozenFrames = [:]
         dragStart = nil
         currentPoint = nil
     }
@@ -369,7 +411,7 @@ final class AreaOverlayView: NSView {
         let loupeSize: CGFloat = 96
         let zoom: CGFloat = 6
         let sampleSize = loupeSize / zoom
-        guard let screen = overlayWindow?.screen else { return }
+        guard let frame = controller.frozenFrame(at: global) else { return }
 
         let sampleGlobal = CGRect(
             x: global.x - sampleSize / 2,
@@ -377,23 +419,42 @@ final class AreaOverlayView: NSView {
             width: sampleSize,
             height: sampleSize
         )
-        guard let cgImage = CGWindowListCreateImage(
-            sampleGlobal,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            .bestResolution
-        ) else { return }
+        let imageBounds = CGRect(x: 0, y: 0, width: frame.image.width, height: frame.image.height)
+        let pixel = DisplayGeometry.pixelRect(
+            cocoaGlobal: sampleGlobal,
+            screenFrame: frame.screenFrame,
+            imagePixelSize: imageBounds.size
+        ).integral
+        let visible = pixel.intersection(imageBounds)
+        guard !visible.isNull, let crop = frame.image.cropping(to: visible) else { return }
 
         let loupeOrigin = NSPoint(
             x: min(max(8, local.x + 20), bounds.width - loupeSize - 8),
             y: min(max(8, local.y + 20), bounds.height - loupeSize - 8)
         )
         let loupeRect = CGRect(origin: loupeOrigin, size: CGSize(width: loupeSize, height: loupeSize))
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: sampleSize, height: sampleSize))
+        // Near a screen edge only part of the sample exists; place it where it belongs in the loupe.
+        // Both the view (flipped) and the image use a top-left origin.
+        let drawRect = CGRect(
+            x: loupeRect.minX + (visible.minX - pixel.minX) / pixel.width * loupeRect.width,
+            y: loupeRect.minY + (visible.minY - pixel.minY) / pixel.height * loupeRect.height,
+            width: visible.width / pixel.width * loupeRect.width,
+            height: visible.height / pixel.height * loupeRect.height
+        )
         NSGraphicsContext.saveGraphicsState()
         let clip = NSBezierPath(roundedRect: loupeRect, xRadius: 8, yRadius: 8)
         clip.addClip()
-        image.draw(in: loupeRect)
+        NSColor.black.setFill()
+        loupeRect.fill()
+        NSGraphicsContext.current?.imageInterpolation = .none
+        NSImage(cgImage: crop, size: drawRect.size).draw(
+            in: drawRect,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1,
+            respectFlipped: true,
+            hints: [.interpolation: NSNumber(value: NSImageInterpolation.none.rawValue)]
+        )
         NSGraphicsContext.restoreGraphicsState()
 
         NSColor.white.withAlphaComponent(0.9).setStroke()
@@ -419,5 +480,12 @@ final class AreaOverlayView: NSView {
                 drawLabel("Press C to copy", near: NSPoint(x: labelX, y: labelY + 26))
             }
         }
+    }
+}
+
+private extension NSScreen {
+    var displayID: CGDirectDisplayID {
+        guard let number = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return 0 }
+        return CGDirectDisplayID(number.uint32Value)
     }
 }

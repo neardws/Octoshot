@@ -5,6 +5,7 @@ import OctoshotCore
 @main
 struct OctoshotCLI {
     static func main() async {
+        UserDefaults.standard.addSuite(named: "com.neardws.Octoshot")
         _ = NSApplication.shared
         let args = Array(CommandLine.arguments.dropFirst())
         if args.isEmpty || args.first == "--help" || args.first == "-h" {
@@ -70,6 +71,11 @@ struct OctoshotCLI {
           record start [--mode fullscreen|region] [--format video|gif] [--rect x,y,w,h]
           record stop
           mcp   Start Model Context Protocol server on stdio
+
+        Capture output uses the configured PNG/JPEG format. Extensionless paths get
+        .png/.jpg; explicit extensions are preserved, but encoding uses the configured format.
+        Automatically named captures never overwrite existing files.
+        record start (CLI/MCP/URL) asks for consent by default in Octoshot.
         """)
     }
 
@@ -80,7 +86,7 @@ struct OctoshotCLI {
         switch sub {
         case "stop":
             let url = AgentAppLauncher.recordURL(action: "stop")
-            AgentAppLauncher.openOctoshotURL(url)
+            try AgentAppLauncher.openOctoshotURL(url)
             printJSON(["status": "stop_requested", "url": url.absoluteString])
         case "start":
             var mode = "fullscreen"
@@ -88,6 +94,9 @@ struct OctoshotCLI {
             var rect: String?
             var i = 1
             while i < args.count {
+                if ["--mode", "--format", "--rect"].contains(args[i]), i + 1 >= args.count {
+                    throw CaptureError.captureFailed("Missing value for \(args[i])")
+                }
                 switch args[i] {
                 case "--mode":
                     i += 1
@@ -103,8 +112,11 @@ struct OctoshotCLI {
                 }
                 i += 1
             }
+            guard ["fullscreen", "region", "area"].contains(mode), ["video", "gif"].contains(format) else {
+                throw CaptureError.captureFailed("Invalid recording mode or format")
+            }
             let url = AgentAppLauncher.recordURL(action: "start", mode: mode, format: format, rect: rect)
-            AgentAppLauncher.openOctoshotURL(url)
+            try AgentAppLauncher.openOctoshotURL(url)
             printJSON(["status": "start_requested", "url": url.absoluteString])
         default:
             throw CaptureError.captureFailed("record requires start or stop")

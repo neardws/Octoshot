@@ -19,29 +19,21 @@ struct ScreenColorInfo: Equatable {
 }
 
 enum ScreenColorSampler {
-    /// Samples the on-screen pixel at an AppKit global point (bottom-left origin).
-    static func sample(at cocoaGlobal: NSPoint) -> ScreenColorInfo? {
-        guard NSScreen.screens.contains(where: { $0.frame.contains(cocoaGlobal) }) else { return nil }
-        let screen = NSScreen.screens.first { $0.frame.contains(cocoaGlobal) } ?? NSScreen.main
-        let scale = screen?.backingScaleFactor ?? 2
-        let side = max(1.0 / scale, 0.5)
-        let rect = CGRect(
-            x: cocoaGlobal.x - side / 2,
-            y: cocoaGlobal.y - side / 2,
-            width: side,
-            height: side
+    /// Reads the pixel at an AppKit global point (bottom-left origin) from a still image of
+    /// the display whose frame is `screenFrame`.
+    static func sample(at cocoaGlobal: NSPoint, screenFrame: CGRect, in image: CGImage) -> ScreenColorInfo? {
+        guard screenFrame.contains(cocoaGlobal) else { return nil }
+        let pixel = DisplayGeometry.pixelRect(
+            cocoaGlobal: CGRect(origin: cocoaGlobal, size: .zero),
+            screenFrame: screenFrame,
+            imagePixelSize: CGSize(width: image.width, height: image.height)
         )
-        guard let cgImage = CGWindowListCreateImage(
-            rect,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            .bestResolution
-        ) else { return nil }
+        let x = min(max(Int(pixel.minX), 0), image.width - 1)
+        let y = min(max(Int(pixel.minY), 0), image.height - 1)
+        guard let cgPixel = image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)) else { return nil }
 
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        let x = max(0, rep.pixelsWide / 2)
-        let y = max(0, rep.pixelsHigh / 2)
-        guard let color = rep.colorAt(x: x, y: y) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cgPixel)
+        guard let color = rep.colorAt(x: 0, y: 0) else { return nil }
         guard let rgb = color.usingColorSpace(.deviceRGB) else { return nil }
         var r: CGFloat = 0
         var g: CGFloat = 0

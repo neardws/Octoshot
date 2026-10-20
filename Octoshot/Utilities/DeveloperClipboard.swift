@@ -39,12 +39,11 @@ enum DeveloperClipboard {
     private static func writeCaptureToDefaultLocation(image: NSImage) throws -> URL {
         let settings = AppSettings.shared
         let url = settings.defaultSaveURL()
-        try ImageFormats.write(
+        return try ImageFormats.writeUnique(
             image: image,
             to: url,
             format: settings.format,
             jpegQuality: settings.jpegQuality
         )
-        return url
     }
 }

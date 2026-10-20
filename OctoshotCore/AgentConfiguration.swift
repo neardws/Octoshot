@@ -2,6 +2,13 @@ import Foundation
 
 /// UserDefaults-backed settings shared by the GUI app, CLI, and MCP server.
 public enum AgentConfiguration {
+    public static var captureShowCursor: Bool {
+        UserDefaults.standard.object(forKey: "captureShowCursor") as? Bool ?? false
+    }
+
+    public static var captureWindowWithShadow: Bool {
+        UserDefaults.standard.object(forKey: "captureWindowWithShadow") as? Bool ?? true
+    }
     private enum Keys {
         static let aiBaseURL = "aiBaseURL"
         static let aiVisionModel = "aiVisionModel"

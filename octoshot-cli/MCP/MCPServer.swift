@@ -113,9 +113,13 @@ actor MCPStdioServer {
             guard case .string(let v)? = args[key] else { return nil }
             return v
         }
-        func int(_ key: String) -> UInt32? {
-            guard case .number(let v)? = args[key] else { return nil }
-            return UInt32(v)
+        func int(_ key: String) throws -> UInt32? {
+            guard let argument = args[key] else { return nil }
+            guard case .number(let value) = argument, value.isFinite,
+                  value >= 0, value <= Double(UInt32.max), value.rounded() == value else {
+                throw CaptureError.captureFailed("Invalid \(key): expected an unsigned 32-bit integer")
+            }
+            return UInt32(value)
         }
         func bool(_ key: String) -> Bool {
             guard case .bool(let v)? = args[key] else { return false }
@@ -130,16 +134,19 @@ actor MCPStdioServer {
             let displays = try await AgentCaptureEngine.listDisplays()
             return String(data: try JSONEncoder().encode(displays), encoding: .utf8) ?? "[]"
         case "capture_screen":
-            let mode: AgentCaptureMode = (str("mode") == "display") ? .display : .fullscreen
+            guard let mode = AgentCaptureMode(rawValue: str("mode") ?? "fullscreen"),
+                  mode == .fullscreen || mode == .display else {
+                throw CaptureError.captureFailed("Invalid mode: expected fullscreen or display")
+            }
             let result = try await AgentCaptureEngine.capture(options: .init(
                 mode: mode,
-                displayID: int("display_id"),
+                displayID: try int("display_id"),
                 outputPath: str("output").map { URL(fileURLWithPath: $0) },
                 includeBase64: bool("base64")
             ))
             return String(data: try JSONEncoder().encode(result), encoding: .utf8) ?? "{}"
         case "capture_window":
-            guard let wid = int("window_id") else { throw CaptureError.captureFailed("window_id required") }
+            guard let wid = try int("window_id") else { throw CaptureError.captureFailed("window_id required") }
             let result = try await AgentCaptureEngine.capture(options: .init(
                 mode: .window,
                 windowID: wid,
@@ -190,11 +197,11 @@ actor MCPStdioServer {
             let mode = str("mode") ?? "fullscreen"
             let format = str("format") ?? "video"
             let url = AgentAppLauncher.recordURL(action: "start", mode: mode, format: format, rect: str("rect"))
-            AgentAppLauncher.openOctoshotURL(url)
+            try AgentAppLauncher.openOctoshotURL(url)
             return "{\"status\":\"start_requested\",\"url\":\"\(url.absoluteString)\"}"
         case "record_stop":
             let url = AgentAppLauncher.recordURL(action: "stop")
-            AgentAppLauncher.openOctoshotURL(url)
+            try AgentAppLauncher.openOctoshotURL(url)
             return "{\"status\":\"stop_requested\",\"url\":\"\(url.absoluteString)\"}"
         default:
             throw CaptureError.captureFailed("Unknown tool \(name)")

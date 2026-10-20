@@ -17,6 +17,13 @@ final class PinnedScreenshotManager {
 
     private init() {}
 
+    /// Window IDs of visible pins, which stay in captures even though they float above other windows.
+    static var visibleWindowIDs: Set<CGWindowID> {
+        Set(NSApp.windows.compactMap { $0 as? PinnedScreenshotPanel }
+            .filter(\.isVisible)
+            .map { CGWindowID($0.windowNumber) })
+    }
+
     func pin(image: NSImage) {
         let controller = PinnedScreenshotWindowController(
             image: image,
@@ -114,14 +121,14 @@ final class PinnedScreenshotWindowController: NSObject, NSWindowDelegate {
     private func saveImage() {
         let url = AppSettings.shared.defaultSaveURL(prefix: "Pinned")
         do {
-            try ImageFormats.write(
+            let actualURL = try ImageFormats.writeUnique(
                 image: image,
                 to: url,
                 format: AppSettings.shared.format,
                 jpegQuality: AppSettings.shared.jpegQuality
             )
-            RecentCapturesStore.record(url: url)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
+            RecentCapturesStore.record(url: actualURL)
+            NSWorkspace.shared.activateFileViewerSelecting([actualURL])
         } catch {
             NSAlert(error: error).runModal()
         }

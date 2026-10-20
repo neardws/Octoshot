@@ -15,7 +15,7 @@ final class ScrollingCaptureController {
         self.region = region
         frames = []
         Task {
-            if let first = try? await ScreenCaptureService.shared.captureRegion(globalRect: region) {
+            if let first = try? await ScreenCaptureService.shared.captureRegion(globalRect: region, showsCursor: AppSettings.shared.captureShowCursor) {
                 frames.append(first)
                 showPanel()
                 installMonitors()
@@ -74,7 +74,7 @@ final class ScrollingCaptureController {
     }
 
     private func captureFrame() async {
-        guard let image = try? await ScreenCaptureService.shared.captureRegion(globalRect: region) else { return }
+        guard let image = try? await ScreenCaptureService.shared.captureRegion(globalRect: region, showsCursor: AppSettings.shared.captureShowCursor) else { return }
         if let last = frames.last, imagesSimilar(last, image) { return }
         frames.append(image)
     }
@@ -84,9 +84,10 @@ final class ScrollingCaptureController {
     }
 
     private func finish() {
+        let stitched = ScrollStitcher.stitch(frames: frames)
         teardown()
-        guard let stitched = ScrollStitcher.stitch(frames: frames) else { return }
-        CaptureCoordinator.shared.presentCapturedImage(stitched)
+        guard let stitched else { return }
+        CaptureCoordinator.shared.presentCapturedImage(stitched, captureAnchor: CGPoint(x: region.midX, y: region.midY))
     }
 
     private func cancel() {

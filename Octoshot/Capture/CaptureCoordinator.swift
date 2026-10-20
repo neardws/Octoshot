@@ -20,27 +20,29 @@ final class CaptureCoordinator {
         }
         areaSelection.onCancel = { [weak self] in self?.isCapturing = false }
 
-        windowSelection.onComplete = { [weak self] window in
-            Task { await self?.performWindowCapture(window) }
+        windowSelection.onComplete = { [weak self] window, anchor in
+            Task { await self?.performWindowCapture(window, captureAnchor: anchor) }
         }
         windowSelection.onCancel = { [weak self] in self?.isCapturing = false }
     }
 
-    func startAreaCapture() {
+    func startAreaCapture(displayID: UInt32? = nil, mode: AreaCaptureMode? = nil) {
         Task {
+            do { try CaptureDisplaySelection.validateActive(displayID) } catch { finishWithError(error); return }
             guard await beginCaptureFlow() else { return }
-            areaSelection.begin()
+            areaSelection.begin(displayID: displayID, mode: mode)
         }
     }
 
-    func startWindowCapture() {
+    func startWindowCapture(displayID: UInt32? = nil) {
         Task {
+            do { try CaptureDisplaySelection.validateActive(displayID) } catch { finishWithError(error); return }
             guard await beginCaptureFlow() else { return }
             do {
                 let content = try await ScreenCaptureService.shared.shareableContent()
                 ScreenRecordingAccessCache.shared.lastKnownGranted = true
                 let appWindows = ShareableWindowFilter.pickableWindows(from: content)
-                windowSelection.begin(windows: appWindows)
+                windowSelection.begin(windows: appWindows, displayID: displayID)
             } catch {
                 await PermissionManager.handleCaptureFailure(error)
                 finishWithError(error)
@@ -52,11 +54,12 @@ final class CaptureCoordinator {
         Task { await performFullscreenCapture() }
     }
 
-    func startFullscreenRecording(video: Bool) {
+    func startFullscreenRecording(video: Bool, displayID: UInt32? = nil) {
+        let selectedID = displayID ?? ScreenCaptureService.displayID(at: NSEvent.mouseLocation)
         Task {
             guard await beginCaptureFlow() else { return }
             isCapturing = false
-            ScreenCaptureRecorder.shared.startFullscreen(kind: video ? .video : .gif)
+            ScreenCaptureRecorder.shared.startFullscreen(kind: video ? .video : .gif, displayID: selectedID)
         }
     }
 
@@ -93,7 +96,10 @@ final class CaptureCoordinator {
 
     private func performRegionCapture(_ rect: CGRect) async {
         do {
-            let image = try await ScreenCaptureService.shared.captureRegion(globalRect: rect)
+            let image = try await ScreenCaptureService.shared.captureRegion(
+                globalRect: rect,
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
             let anchor = CGPoint(x: rect.midX, y: rect.midY)
             await handleRegionCaptureResult(image, captureAnchor: anchor)
@@ -128,18 +134,16 @@ final class CaptureCoordinator {
         }
     }
 
-    private func performWindowCapture(_ window: SCWindow) async {
+    private func performWindowCapture(_ window: SCWindow, captureAnchor: CGPoint) async {
         defer { isCapturing = false }
         do {
-            let image = try await ScreenCaptureService.shared.captureWindow(window)
+            let image = try await ScreenCaptureService.shared.captureWindow(
+                window,
+                includeShadow: AppSettings.shared.captureWindowWithShadow,
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
-            let anchor = NSScreen.screens.first.map {
-                QuickAccessCaptureCoordinates.appKitPoint(
-                    fromQuartz: CGPoint(x: window.frame.midX, y: window.frame.midY),
-                    primaryFrame: $0.frame
-                )
-            }
-            presentResult(image, captureAnchor: anchor)
+            presentResult(image, captureAnchor: captureAnchor)
         } catch {
             await PermissionManager.handleCaptureFailure(error)
             finishWithError(error)
@@ -147,14 +151,17 @@ final class CaptureCoordinator {
     }
 
     private func performFullscreenCapture() async {
+        let mouse = NSEvent.mouseLocation
+        let selectedID = ScreenCaptureService.displayID(at: mouse)
         guard await beginCaptureFlow() else { return }
         defer { isCapturing = false }
         do {
-            let mouse = NSEvent.mouseLocation
-            let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
             let content = try await ScreenCaptureService.shared.shareableContent()
-            let display = content.displays.first { $0.displayID == screen?.displayID } ?? content.displays.first
-            let image = try await ScreenCaptureService.shared.captureFullscreen(display: display)
+            guard let display = content.displays.first(where: { $0.displayID == selectedID }) else { throw CaptureError.noDisplays }
+            let image = try await ScreenCaptureService.shared.captureFullscreen(
+                display: display,
+                showsCursor: AppSettings.shared.captureShowCursor
+            )
             ScreenRecordingAccessCache.shared.lastKnownGranted = true
             let anchor = CGPoint(x: mouse.x, y: mouse.y)
             presentResult(image, captureAnchor: anchor)
@@ -164,11 +171,11 @@ final class CaptureCoordinator {
         }
     }
 
-    func presentCapturedImage(_ image: NSImage) {
-        presentResult(image, captureAnchor: NSEvent.mouseLocation)
+    func presentCapturedImage(_ image: NSImage, captureAnchor: CGPoint? = nil) {
+        presentResult(image, captureAnchor: captureAnchor ?? NSEvent.mouseLocation)
     }
 
-    func presentCapturedMovie(at url: URL) {
+    func presentCapturedMovie(at url: URL, captureAnchor: CGPoint? = nil) {
         CaptureFeedback.playCaptureSoundIfEnabled()
         let preview = NSImage(size: NSSize(width: 120, height: 68))
         preview.lockFocus()
@@ -179,13 +186,13 @@ final class CaptureCoordinator {
             img.draw(in: NSRect(x: 40, y: 14, width: 40, height: 40))
         }
         preview.unlockFocus()
-        presentResult(preview, savedFileURL: url, captureAnchor: NSEvent.mouseLocation)
+        presentResult(preview, savedFileURL: url, captureAnchor: captureAnchor ?? NSEvent.mouseLocation)
         RecentCapturesStore.record(url: url)
     }
 
-    func presentCapturedGIF(at url: URL, preview: NSImage) {
+    func presentCapturedGIF(at url: URL, preview: NSImage, captureAnchor: CGPoint? = nil) {
         CaptureFeedback.playCaptureSoundIfEnabled()
-        presentResult(preview, savedFileURL: url, captureAnchor: NSEvent.mouseLocation)
+        presentResult(preview, savedFileURL: url, captureAnchor: captureAnchor ?? NSEvent.mouseLocation)
         RecentCapturesStore.record(url: url)
     }
 
@@ -201,14 +208,14 @@ final class CaptureCoordinator {
         if settings.afterCaptureSaveToDisk, savedFileURL == nil {
             let url = settings.defaultSaveURL()
             do {
-                try ImageFormats.write(
+                let actualURL = try ImageFormats.writeUnique(
                     image: image,
                     to: url,
                     format: settings.format,
                     jpegQuality: settings.jpegQuality
                 )
-                savedURL = url
-                RecentCapturesStore.record(url: url)
+                savedURL = actualURL
+                RecentCapturesStore.record(url: actualURL)
             } catch {
                 finishWithError(error)
             }
@@ -235,14 +242,14 @@ final class CaptureCoordinator {
                 }
                 let url = AppSettings.shared.defaultSaveURL()
                 do {
-                    try ImageFormats.write(
+                    let actualURL = try ImageFormats.writeUnique(
                         image: image,
                         to: url,
                         format: AppSettings.shared.format,
                         jpegQuality: AppSettings.shared.jpegQuality
                     )
-                    captureURL = url
-                    RecentCapturesStore.record(url: url)
+                    captureURL = actualURL
+                    RecentCapturesStore.record(url: actualURL)
                 } catch {
                     self.finishWithError(error)
                 }

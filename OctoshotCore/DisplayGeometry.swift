@@ -56,6 +56,20 @@ public enum DisplayGeometry {
         )
     }
 
+    /// Pixel rect (top-left origin) inside a full-display image for a rect in AppKit global
+    /// coordinates. The scale comes from the image itself, so it matches what was captured.
+    public static func pixelRect(cocoaGlobal rect: CGRect, screenFrame: CGRect, imagePixelSize: CGSize) -> CGRect {
+        guard screenFrame.width > 0, screenFrame.height > 0 else { return .zero }
+        let scaleX = imagePixelSize.width / screenFrame.width
+        let scaleY = imagePixelSize.height / screenFrame.height
+        return CGRect(
+            x: (rect.minX - screenFrame.minX) * scaleX,
+            y: (screenFrame.maxY - rect.maxY) * scaleY,
+            width: rect.width * scaleX,
+            height: rect.height * scaleY
+        )
+    }
+
     public static func normalizedSelection(from start: NSPoint, to end: NSPoint) -> CGRect {
         let x = min(start.x, end.x)
         let y = min(start.y, end.y)

@@ -1,6 +1,12 @@
 import AppKit
 
 public enum ImageFormats {
+    public static func writeUnique(image: NSImage, to url: URL, format: ScreenshotFormat, jpegQuality: Double) throws -> URL {
+        guard let data = data(for: image, format: format, jpegQuality: jpegQuality) else {
+            throw CaptureError.captureFailed("Failed to encode image")
+        }
+        return try CaptureOutput.writeUnique(data, to: url)
+    }
     public static func pngData(from image: NSImage) -> Data? {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff) else { return nil }

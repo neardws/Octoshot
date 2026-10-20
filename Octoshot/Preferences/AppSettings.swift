@@ -43,6 +43,7 @@ final class AppSettings: ObservableObject {
         static let filenamePattern = "filenamePattern"
         static let quickAccessAutoClose = "quickAccessAutoCloseSeconds"
         static let captureWindowWithShadow = "captureWindowWithShadow"
+        static let captureShowCursor = "captureShowCursor"
         static let developerMode = "developerModeEnabled"
         static let markdownAbsolutePath = "markdownImageUseAbsolutePath"
     }
@@ -138,6 +139,11 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(captureWindowWithShadow, forKey: Keys.captureWindowWithShadow) }
     }
 
+    /// Whether screenshots include the mouse pointer. Recordings use `recordShowCursor`.
+    @Published var captureShowCursor: Bool {
+        didSet { UserDefaults.standard.set(captureShowCursor, forKey: Keys.captureShowCursor) }
+    }
+
     @Published var developerModeEnabled: Bool {
         didSet { UserDefaults.standard.set(developerModeEnabled, forKey: Keys.developerMode) }
     }
@@ -190,6 +196,7 @@ final class AppSettings: ObservableObject {
         filenamePattern = UserDefaults.standard.string(forKey: Keys.filenamePattern) ?? Self.defaultFilenamePattern
         quickAccessAutoCloseSeconds = UserDefaults.standard.object(forKey: Keys.quickAccessAutoClose) as? Double ?? 0
         captureWindowWithShadow = UserDefaults.standard.object(forKey: Keys.captureWindowWithShadow) as? Bool ?? true
+        captureShowCursor = UserDefaults.standard.object(forKey: Keys.captureShowCursor) as? Bool ?? false
         developerModeEnabled = UserDefaults.standard.object(forKey: Keys.developerMode) as? Bool ?? false
         markdownImageUseAbsolutePath = UserDefaults.standard.object(forKey: Keys.markdownAbsolutePath) as? Bool ?? true
     }
@@ -235,9 +242,6 @@ final class AppSettings: ObservableObject {
         if name.isEmpty {
             name = "\(prefix) \(dateFormatter.string(from: now)) \(timeFormatter.string(from: now))"
         }
-        if !name.lowercased().hasSuffix(".\(format.fileExtension)") {
-            name += ".\(format.fileExtension)"
-        }
-        return name
+        return CaptureOutput.filename(name, format: format)
     }
 }

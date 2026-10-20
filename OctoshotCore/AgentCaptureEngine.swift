@@ -31,6 +31,15 @@ public struct AgentCaptureOptions: Sendable {
         self.outputPath = outputPath
         self.includeBase64 = includeBase64
     }
+
+    public func validate() throws {
+        if mode == .window, windowID == nil { throw CaptureError.captureFailed("windowID required") }
+        if mode == .region {
+            guard let region,
+                  [region.origin.x, region.origin.y, region.size.width, region.size.height].allSatisfy(\.isFinite),
+                  region.size.width >= 2, region.size.height >= 2 else { throw CaptureError.emptySelection }
+        }
+    }
 }
 
 public enum AgentCaptureEngine {
@@ -62,6 +71,9 @@ public enum AgentCaptureEngine {
     }
 
     public static func capture(options: AgentCaptureOptions) async throws -> AgentCaptureResult {
+        try options.validate()
+        try CaptureDisplaySelection.validateActive(options.displayID)
+        let selectedID = options.displayID ?? ScreenCaptureService.displayID(at: NSEvent.mouseLocation)
         try await AgentPermission.requireScreenCapture()
         let content = try await ScreenCaptureService.shared.shareableContent()
         let image: NSImage
@@ -70,23 +82,23 @@ public enum AgentCaptureEngine {
 
         switch options.mode {
         case .fullscreen, .display:
-            let display = content.displays.first { $0.displayID == options.displayID }
-                ?? content.displays.first
+            try CaptureDisplaySelection.validate(selectedID, available: content.displays.map(\.displayID))
+            let display = content.displays.first { $0.displayID == selectedID }
             guard let target = display else { throw CaptureError.noDisplays }
             displayMeta = target.displayID
-            image = try await ScreenCaptureService.shared.captureFullscreen(display: target)
+            image = try await ScreenCaptureService.shared.captureFullscreen(display: target, showsCursor: AgentConfiguration.captureShowCursor)
         case .window:
             guard let wid = options.windowID else { throw CaptureError.captureFailed("windowID required") }
             guard let window = ShareableWindowFilter.pickableWindows(from: content).first(where: { $0.windowID == wid }) else {
                 throw CaptureError.noWindows
             }
             windowMeta = (window.windowID, window.title ?? "", window.owningApplication?.applicationName ?? "")
-            image = try await ScreenCaptureService.shared.captureWindow(window)
+            image = try await ScreenCaptureService.shared.captureWindow(window, includeShadow: AgentConfiguration.captureWindowWithShadow, showsCursor: AgentConfiguration.captureShowCursor)
         case .region:
             guard let region = options.region, region.width >= 2, region.height >= 2 else {
                 throw CaptureError.emptySelection
             }
-            image = try await ScreenCaptureService.shared.captureRegion(globalRect: region)
+            image = try await ScreenCaptureService.shared.captureRegion(globalRect: region, showsCursor: AgentConfiguration.captureShowCursor, displayID: options.displayID)
         }
 
         let path = try persist(image: image, preferredURL: options.outputPath)
@@ -114,20 +126,20 @@ public enum AgentCaptureEngine {
     }
 
     private static func persist(image: NSImage, preferredURL: URL?) throws -> URL? {
-        let url = preferredURL ?? defaultOutputURL()
-        let format = AgentConfiguration.screenshotFormat
-        if format == "jpeg" || format == "jpg" {
-            try ImageFormats.writeJPEG(image: image, to: url, quality: AgentConfiguration.jpegQuality)
-        } else {
-            try ImageFormats.writePNG(image: image, to: url)
+        let format: ScreenshotFormat = ["jpeg", "jpg"].contains(AgentConfiguration.screenshotFormat) ? .jpeg : .png
+        if let preferredURL {
+            let url = CaptureOutput.explicitURL(preferredURL, format: format)
+            try ImageFormats.write(image: image, to: url, format: format, jpegQuality: AgentConfiguration.jpegQuality)
+            return url
         }
-        return url
+        return try ImageFormats.writeUnique(image: image, to: defaultOutputURL(), format: format, jpegQuality: AgentConfiguration.jpegQuality)
     }
 
     private static func defaultOutputURL() -> URL {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        let name = "Octoshot \(formatter.string(from: Date())).png"
+        let format: ScreenshotFormat = ["jpeg", "jpg"].contains(AgentConfiguration.screenshotFormat) ? .jpeg : .png
+        let name = CaptureOutput.filename("Octoshot \(formatter.string(from: Date()))", format: format)
         return AgentConfiguration.saveDirectory.appendingPathComponent(name)
     }
 }

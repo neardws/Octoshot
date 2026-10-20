@@ -428,9 +428,10 @@ final class AnnotationCanvasView: NSView {
         guard let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         let scaleX = CGFloat(cg.width) / sourceImage.size.width
         let scaleY = CGFloat(cg.height) / sourceImage.size.height
+        // Both `imageRegion` and CGImage pixels use a top-left origin.
         let pixelCrop = CGRect(
             x: imageRegion.origin.x * scaleX,
-            y: CGFloat(cg.height) - (imageRegion.origin.y + imageRegion.height) * scaleY,
+            y: imageRegion.origin.y * scaleY,
             width: imageRegion.width * scaleX,
             height: imageRegion.height * scaleY
         ).integral
@@ -476,8 +477,17 @@ final class AnnotationCanvasView: NSView {
         }
         let size = baseImage.size
         let image = NSImage(size: size)
-        image.lockFocus()
-        baseImage.draw(in: NSRect(origin: .zero, size: size))
+        // Strokes and redactions are stored with a top-left origin (the flipped view's space),
+        // so composite in a flipped context too; otherwise they land vertically mirrored.
+        image.lockFocusFlipped(true)
+        baseImage.draw(
+            in: NSRect(origin: .zero, size: size),
+            from: .zero,
+            operation: .copy,
+            fraction: 1,
+            respectFlipped: true,
+            hints: nil
+        )
         let canvas = NSRect(origin: .zero, size: size)
         for region in redactionRegions {
             AnnotationDrawing.pixelate(

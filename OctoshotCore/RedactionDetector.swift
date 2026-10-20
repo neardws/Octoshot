@@ -7,7 +7,7 @@ public enum RedactionDetector {
         settings: RedactionSettingsSnapshot? = nil
     ) async throws -> [RedactionCandidate] {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return []
+            throw CaptureError.captureFailed("Unable to decode image for redaction detection")
         }
         let settings = settings ?? AgentConfiguration.redactionSettings()
         var candidates: [RedactionCandidate] = []
@@ -27,69 +27,46 @@ public enum RedactionDetector {
         imageSize: NSSize,
         settings: RedactionSettingsSnapshot
     ) async throws -> [RedactionCandidate] {
-        try await withCheckedThrowingContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try handler.perform([request])
+        let observations = request.results ?? []
+        var found: [RedactionCandidate] = []
+        for observation in observations {
+            guard let top = observation.topCandidates(1).first else { continue }
+            let matches = SensitivePatternMatcher.matches(in: top.string, settings: settings)
+            for match in matches {
+                let visionBox: CGRect
+                if let observation = try? top.boundingBox(for: match.range) {
+                    visionBox = observation.boundingBox
+                } else {
+                    visionBox = observation.boundingBox
                 }
-                let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                var found: [RedactionCandidate] = []
-                for observation in observations {
-                    guard let top = observation.topCandidates(1).first else { continue }
-                    let matches = SensitivePatternMatcher.matches(in: top.string, settings: settings)
-                    for match in matches {
-                        let visionBox: CGRect
-                        if let observation = try? top.boundingBox(for: match.range) {
-                            visionBox = observation.boundingBox
-                        } else {
-                            visionBox = observation.boundingBox
-                        }
-                        let rect = visionRectToImage(visionBox, imageSize: imageSize)
-                        found.append(RedactionCandidate(
-                            rect: rect.insetBy(dx: -4, dy: -4),
-                            kind: match.kind,
-                            detail: match.value
-                        ))
-                    }
-                }
-                continuation.resume(returning: found)
-            }
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            request.recognitionLanguages = ["zh-Hans", "en-US"]
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(throwing: error)
+                let rect = visionRectToImage(visionBox, imageSize: imageSize)
+                found.append(RedactionCandidate(
+                    rect: rect.insetBy(dx: -4, dy: -4),
+                    kind: match.kind,
+                    detail: match.value
+                ))
             }
         }
+        return found
     }
 
     private static func detectFaces(in cgImage: CGImage, imageSize: NSSize) async throws -> [RedactionCandidate] {
-        try await withCheckedThrowingContinuation { continuation in
-            let request = VNDetectFaceRectanglesRequest { request, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                let observations = request.results as? [VNFaceObservation] ?? []
-                let faces = observations.map { face in
-                    RedactionCandidate(
-                        rect: visionRectToImage(face.boundingBox, imageSize: imageSize).insetBy(dx: -8, dy: -8),
-                        kind: .face,
-                        detail: "Face"
-                    )
-                }
-                continuation.resume(returning: faces)
-            }
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(throwing: error)
-            }
+        let request = VNDetectFaceRectanglesRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try handler.perform([request])
+        let observations = request.results ?? []
+        return observations.map { face in
+            RedactionCandidate(
+                rect: visionRectToImage(face.boundingBox, imageSize: imageSize).insetBy(dx: -8, dy: -8),
+                kind: .face,
+                detail: "Face"
+            )
         }
     }
 

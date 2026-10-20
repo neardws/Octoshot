@@ -234,13 +234,13 @@ final class AnnotationWindowController {
         guard let image = canvasView?.currentImage() else { return }
         let url = AppSettings.shared.defaultSaveURL(prefix: "Annotated")
         do {
-            try ImageFormats.write(
+            let actualURL = try ImageFormats.writeUnique(
                 image: image,
                 to: url,
                 format: AppSettings.shared.format,
                 jpegQuality: AppSettings.shared.jpegQuality
             )
-            lastSavedURL = url
+            lastSavedURL = actualURL
         } catch {
             NSAlert(error: error).runModal()
         }
