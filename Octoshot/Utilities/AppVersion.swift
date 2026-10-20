@@ -3,7 +3,7 @@ import OctoshotCore
 
 enum AppVersion {
     static var short: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
+        OctoshotVersion.semanticVersion()
     }
 
     static var build: String {

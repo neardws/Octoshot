@@ -83,7 +83,8 @@ targets:
     settings:
       PRODUCT_NAME: octoshot
       PRODUCT_BUNDLE_IDENTIFIER: com.neardws.octoshot-cli
-      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_FILE: octoshot-cli/Info.plist
+      CREATE_INFOPLIST_SECTION_IN_BINARY: YES
       LD_RUNPATH_SEARCH_PATHS:
         - $(inherited)
         - "@executable_path"
@@ -157,7 +158,6 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       COMBINE_HIDPI_IMAGES: YES
       CURRENT_PROJECT_VERSION: 5
-      MARKETING_VERSION: 0.3.2
       LD_RUNPATH_SEARCH_PATHS:
         - $(inherited)
         - "@executable_path/../Frameworks"

@@ -110,6 +110,16 @@ tccutil reset ScreenCapture com.neardws.Octoshot
 
 欢迎 Issue 与 Pull Request：[neardws/Octoshot](https://github.com/neardws/Octoshot)。请先 `xcodegen generate` 再构建；修改应用图标可运行 `python3 Scripts/generate_icons.py`。
 
+## 截图自动化安全
+
+通过 CLI、MCP 或 `octoshot://` 发起的 `record start` 默认会在一酱（Octoshot）中请求确认。
+记住的 URL 授权绑定到调用进程的代码签名指定要求（designated requirement），而非仅绑定 Bundle ID 或路径。
+浏览器及已注册的 HTTP/HTTPS 处理程序不能被永久允许；旧版仅存字符串的允许记录会被忽略。
+旧版全局“始终允许”策略现在仍会请求确认，除非调用方的签名已验证且已记住授权。区域录屏也会先确认，再打开区域选择。
+截图按设置使用 PNG/JPEG 编码。自动生成的文件名和未指定扩展名的 CLI 路径使用 `.png`/`.jpg`；显式指定的扩展名会保留，即使它与配置的编码不一致。
+自动命名的文件采用独占创建，并在重名时追加编号，避免覆盖其他截图。
+无效的显示器 ID 会返回错误并列出可用 ID，不会静默改为截取其他显示器。
+
 ## 许可证
 
 [MIT License](LICENSE) · Copyright © 2026 [neardws](https://github.com/neardws)
@@ -240,6 +250,8 @@ Capture output uses the configured PNG/JPEG encoding. Auto-generated names and
 extensionless CLI paths use `.png`/`.jpg`; an explicitly supplied extension is
 preserved even if it differs from the configured encoding. Auto-named files use
 exclusive creation and numbered suffixes to avoid overwriting other captures.
+Invalid display IDs return an error listing available IDs rather than silently
+capturing another display.
 
 ## License
 

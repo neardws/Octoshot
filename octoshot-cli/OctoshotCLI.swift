@@ -5,9 +5,13 @@ import OctoshotCore
 @main
 struct OctoshotCLI {
     static func main() async {
+        let args = Array(CommandLine.arguments.dropFirst())
+        if args.first == "--version" || args.first == "version" {
+            print(OctoshotVersion.semanticVersion())
+            return
+        }
         UserDefaults.standard.addSuite(named: "com.neardws.Octoshot")
         _ = NSApplication.shared
-        let args = Array(CommandLine.arguments.dropFirst())
         if args.isEmpty || args.first == "--help" || args.first == "-h" {
             printUsage()
             return
@@ -59,6 +63,7 @@ struct OctoshotCLI {
         octoshot — Octoshot agent CLI (local-only)
 
         Commands:
+          version, --version   Print the semantic version
           capture --mode <fullscreen|display|window|region> [--display-id N] [--window-id N] [--rect x,y,w,h] [--output PATH] [--base64]
           list-windows
           list-displays
