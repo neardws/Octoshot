@@ -28,16 +28,31 @@ final class ScreenCaptureRecorder: NSObject {
     private var captureRegion: CGRect?
     /// Display that fullscreen GIF frames come from, fixed when recording starts.
     private var gifDisplayID: CGDirectDisplayID?
+    private var captureAnchor: CGPoint = .zero
     private var stopPanel: RecordingStopPanelController?
 
     private override init() {
         super.init()
     }
 
-    func startRegion(_ region: CGRect, kind: RecordingKind) {
+    func startRegion(_ region: CGRect, kind: RecordingKind, displayID: UInt32? = nil) {
         guard !isRecording else { return }
+        var region = region
+        if let displayID {
+            guard let screen = ScreenCaptureService.screen(for: displayID) else {
+                showError(CaptureError.noDisplays)
+                return
+            }
+            region = region.intersection(screen.frame)
+        }
+        guard !region.isNull, region.width.isFinite, region.height.isFinite,
+              region.width >= 2, region.height >= 2 else {
+            showError(CaptureError.emptySelection)
+            return
+        }
         self.kind = kind
         self.captureRegion = region
+        captureAnchor = CGPoint(x: region.midX, y: region.midY)
         if kind == .gif {
             do { try startGIFCapture() } catch { showError(error) }
             return
@@ -45,10 +60,16 @@ final class ScreenCaptureRecorder: NSObject {
         Task { await startStream(for: region, kind: kind) }
     }
 
-    func startFullscreen(kind: RecordingKind) {
+    func startFullscreen(kind: RecordingKind, displayID: UInt32? = nil) {
         guard !isRecording else { return }
         self.kind = kind
         self.captureRegion = nil
+        gifDisplayID = displayID ?? ScreenCaptureService.displayID(at: NSEvent.mouseLocation)
+        guard let selectedID = gifDisplayID, let screen = ScreenCaptureService.screen(for: selectedID) else {
+            showError(CaptureError.noDisplays)
+            return
+        }
+        captureAnchor = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
         if kind == .gif {
             do { try startGIFCapture() } catch { showError(error) }
             return
@@ -63,7 +84,7 @@ final class ScreenCaptureRecorder: NSObject {
     private func startFullscreenStream(kind: RecordingKind) async {
         do {
             let content = try await ScreenCaptureService.shared.shareableContent()
-            guard let display = ScreenCaptureService.displayUnderMouse(in: content) else {
+            guard let display = content.displays.first(where: { $0.displayID == gifDisplayID }) else {
                 throw CaptureError.noDisplays
             }
             let screen = NSScreen.screens.first { $0.displayID == display.displayID }
@@ -73,6 +94,7 @@ final class ScreenCaptureRecorder: NSObject {
             config.width = Int(CGFloat(display.width) * scale)
             config.height = Int(CGFloat(display.height) * scale)
             config.showsCursor = AppSettings.shared.recordShowCursor
+            config.ignoreShadowsDisplay = !AppSettings.shared.captureWindowWithShadow
             config.captureResolution = .best
             try await beginRecording(filter: filter, configuration: config, kind: kind)
         } catch {
@@ -83,8 +105,8 @@ final class ScreenCaptureRecorder: NSObject {
     private func startStream(for region: CGRect, kind: RecordingKind) async {
         do {
             let content = try await ScreenCaptureService.shared.shareableContent()
-            guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(region) }) ?? NSScreen.main,
-                  let display = content.displays.first(where: { $0.displayID == screen.displayID }) ?? content.displays.first
+            guard let screen = NSScreen.screens.first(where: { $0.frame.contains(captureAnchor) }),
+                  let display = content.displays.first(where: { $0.displayID == screen.displayID })
             else { throw CaptureError.noDisplays }
 
             let intersection = region.intersection(screen.frame)
@@ -100,6 +122,7 @@ final class ScreenCaptureRecorder: NSObject {
             config.width = Int(intersection.width * scale)
             config.height = Int(intersection.height * scale)
             config.showsCursor = AppSettings.shared.recordShowCursor
+            config.ignoreShadowsDisplay = !AppSettings.shared.captureWindowWithShadow
             config.captureResolution = .best
             try await beginRecording(filter: filter, configuration: config, kind: kind)
         } catch {
@@ -141,13 +164,11 @@ final class ScreenCaptureRecorder: NSObject {
         isRecording = true
         notifyRecordingChanged()
         stopPanel = RecordingStopPanelController.shared
-        stopPanel?.show(onStop: { [weak self] in self?.stop() })
+        stopPanel?.show(captureAnchor: captureAnchor, onStop: { [weak self] in self?.stop() })
     }
 
     private func startGIFCapture() throws {
         gifFrames = []
-        let mouse = NSEvent.mouseLocation
-        gifDisplayID = (NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main)?.displayID
         let fps = AppSettings.shared.gifFPS
         gifTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.captureGIFFrame() }
@@ -155,7 +176,7 @@ final class ScreenCaptureRecorder: NSObject {
         isRecording = true
         notifyRecordingChanged()
         stopPanel = RecordingStopPanelController.shared
-        stopPanel?.show(onStop: { [weak self] in self?.stop() })
+        stopPanel?.show(captureAnchor: captureAnchor, onStop: { [weak self] in self?.stop() })
         Task { await captureGIFFrame() }
     }
 
@@ -173,8 +194,7 @@ final class ScreenCaptureRecorder: NSObject {
 
     private func captureFullscreenGIFFrame() async {
         guard let content = try? await ScreenCaptureService.shared.shareableContent(),
-              let display = content.displays.first(where: { $0.displayID == gifDisplayID })
-                ?? ScreenCaptureService.displayUnderMouse(in: content),
+              let display = content.displays.first(where: { $0.displayID == gifDisplayID }),
               let image = try? await ScreenCaptureService.shared.captureFullscreen(
                   display: display,
                   showsCursor: AppSettings.shared.recordShowCursor
@@ -205,7 +225,7 @@ final class ScreenCaptureRecorder: NSObject {
         if let writer = assetWriter, let url = outputURL {
             await writer.finishWriting()
             if writer.status == .completed {
-                CaptureCoordinator.shared.presentCapturedMovie(at: url)
+                CaptureCoordinator.shared.presentCapturedMovie(at: url, captureAnchor: captureAnchor)
             }
         }
         assetWriter = nil
@@ -225,7 +245,7 @@ final class ScreenCaptureRecorder: NSObject {
                 to: url
             )
             if let preview = gifFrames.first {
-                CaptureCoordinator.shared.presentCapturedGIF(at: url, preview: preview)
+                CaptureCoordinator.shared.presentCapturedGIF(at: url, preview: preview, captureAnchor: captureAnchor)
             }
         } catch {
             showError(error)
@@ -281,7 +301,7 @@ final class RecordingStopPanelController {
     private var panel: NSPanel?
     private let stopTarget = RecordingStopTarget()
 
-    func show(onStop: @escaping () -> Void) {
+    func show(captureAnchor: CGPoint, onStop: @escaping () -> Void) {
         stopTarget.onStop = onStop
         let button = NSButton(title: "Stop Recording", target: stopTarget, action: #selector(RecordingStopTarget.stopPressed))
         button.bezelStyle = .rounded
@@ -296,7 +316,7 @@ final class RecordingStopPanelController {
             self.panel = panel
         }
         panel?.contentView = view
-        panel?.center()
+        panel?.setFrameOrigin(CGPoint(x: captureAnchor.x - 80, y: captureAnchor.y - 22))
         panel?.orderFrontRegardless()
         panel?.makeKey()
     }

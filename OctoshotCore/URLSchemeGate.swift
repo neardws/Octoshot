@@ -4,7 +4,7 @@ import Foundation
 public enum URLSchemeAutomationPolicy: String, CaseIterable, Identifiable, Sendable {
     /// Confirm each request that would capture or record without further input.
     case ask
-    /// Run every request without confirmation.
+    /// Legacy value; unverified callers still require confirmation.
     case allow
     /// Ignore requests, except stopping a recording.
     case off
@@ -15,6 +15,24 @@ public enum URLSchemeAutomationPolicy: String, CaseIterable, Identifiable, Senda
 /// Decides whether an `octoshot://` request may run. Any app or web page can open these URLs,
 /// so requests that capture without the user taking part need their consent.
 public enum URLSchemeGate {
+    public static func isBrowser(identifier: String, isRegisteredWebHandler: Bool) -> Bool {
+        let prefixes = ["com.apple.safari", "com.google.chrome", "org.chromium.chromium",
+                        "org.mozilla.firefox", "org.mozilla.nightly", "com.microsoft.edgemac",
+                        "company.thebrowser.browser", "com.brave.browser", "com.operasoftware.opera",
+                        "com.vivaldi.vivaldi", "com.kagi.kagimacos"]
+        return isRegisteredWebHandler || prefixes.contains { identifier.lowercased().hasPrefix($0) }
+    }
+
+    public static func canAlwaysAllow(identity: String?, requirement: String?, isBrowser: Bool) -> Bool {
+        guard let identity, !identity.isEmpty, let requirement, !requirement.isEmpty else { return false }
+        return !isBrowser
+    }
+
+    public static func isTrusted(identity: String?, requirement: String?, isBrowser: Bool,
+                                 storedRequirement: String?, signatureMatches: Bool) -> Bool {
+        canAlwaysAllow(identity: identity, requirement: requirement, isBrowser: isBrowser)
+            && storedRequirement != nil && signatureMatches
+    }
     public enum RequestKind: Equatable, Sendable {
         /// Opens area or window selection; nothing is captured until the user selects.
         case interactive
@@ -50,10 +68,8 @@ public enum URLSchemeGate {
             case "stop":
                 return .stopRecording
             case "start":
-                if value("rect") != nil { return .silentCapture }
                 switch value("mode") ?? "fullscreen" {
-                case "area", "region": return .interactive
-                case "fullscreen": return .silentCapture
+                case "area", "region", "fullscreen": return .silentCapture
                 default: return .unsupported
                 }
             default:
@@ -64,7 +80,7 @@ public enum URLSchemeGate {
         }
     }
 
-    /// - Parameter callerIsTrusted: the user chose "Always allow" for the app that opened the URL.
+    /// - Parameter callerIsTrusted: a non-browser sender validated against its remembered signing requirement.
     public static func decision(
         for kind: RequestKind,
         policy: URLSchemeAutomationPolicy,
@@ -80,8 +96,7 @@ public enum URLSchemeGate {
         case .silentCapture:
             switch policy {
             case .off: return .refuse
-            case .allow: return .run
-            case .ask: return callerIsTrusted ? .run : .ask
+            case .allow, .ask: return callerIsTrusted ? .run : .ask
             }
         }
     }

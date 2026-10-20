@@ -60,7 +60,7 @@ struct AgentSettingsPane: View {
 
             Section {
                 Picker(OctoshotL10n.urlSchemePolicyLabel, selection: $urlSchemePolicy) {
-                    ForEach(URLSchemeAutomationPolicy.allCases) { policy in
+                    ForEach([URLSchemeAutomationPolicy.ask, .off]) { policy in
                         Text(OctoshotL10n.urlSchemePolicyName(policy)).tag(policy)
                     }
                 }
@@ -72,7 +72,7 @@ struct AgentSettingsPane: View {
                     .foregroundStyle(.secondary)
                 if trustedCallerCount > 0 {
                     Button(OctoshotL10n.urlSchemeForgetTrusted(count: trustedCallerCount)) {
-                        AppSettings.shared.urlSchemeTrustedCallers = []
+                        AppSettings.shared.urlSchemeTrustedCallers = [:]
                         trustedCallerCount = 0
                     }
                 }

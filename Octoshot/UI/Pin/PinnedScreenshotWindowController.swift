@@ -121,14 +121,14 @@ final class PinnedScreenshotWindowController: NSObject, NSWindowDelegate {
     private func saveImage() {
         let url = AppSettings.shared.defaultSaveURL(prefix: "Pinned")
         do {
-            try ImageFormats.write(
+            let actualURL = try ImageFormats.writeUnique(
                 image: image,
                 to: url,
                 format: AppSettings.shared.format,
                 jpegQuality: AppSettings.shared.jpegQuality
             )
-            RecentCapturesStore.record(url: url)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
+            RecentCapturesStore.record(url: actualURL)
+            NSWorkspace.shared.activateFileViewerSelecting([actualURL])
         } catch {
             NSAlert(error: error).runModal()
         }

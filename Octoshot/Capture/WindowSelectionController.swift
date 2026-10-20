@@ -3,7 +3,7 @@ import ScreenCaptureKit
 import OctoshotCore
 
 final class WindowSelectionController {
-    var onComplete: ((SCWindow) -> Void)?
+    var onComplete: ((SCWindow, CGPoint) -> Void)?
     var onCancel: (() -> Void)?
 
     private var overlayWindows: [WindowOverlayWindow] = []
@@ -14,11 +14,11 @@ final class WindowSelectionController {
     private var highlighted: SCWindow?
     private var lastMouseGlobal: NSPoint = NSEvent.mouseLocation
 
-    func begin(windows: [SCWindow]) {
+    func begin(windows: [SCWindow], displayID: UInt32? = nil) {
         end()
         self.windows = windows
         lastMouseGlobal = NSEvent.mouseLocation
-        for screen in NSScreen.screens {
+        for screen in NSScreen.screens where displayID == nil || screen == displayID.flatMap(ScreenCaptureService.screen(for:)) {
             let window = WindowOverlayWindow(screen: screen)
             window.controller = self
             overlayWindows.append(window)
@@ -61,8 +61,9 @@ final class WindowSelectionController {
     }
 
     func select(_ window: SCWindow) {
+        let anchor = lastMouseGlobal
         end()
-        onComplete?(window)
+        onComplete?(window, anchor)
     }
 
     func cancel() {

@@ -242,9 +242,6 @@ final class AppSettings: ObservableObject {
         if name.isEmpty {
             name = "\(prefix) \(dateFormatter.string(from: now)) \(timeFormatter.string(from: now))"
         }
-        if !name.lowercased().hasSuffix(".\(format.fileExtension)") {
-            name += ".\(format.fileExtension)"
-        }
-        return name
+        return CaptureOutput.filename(name, format: format)
     }
 }

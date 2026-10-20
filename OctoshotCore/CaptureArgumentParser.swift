@@ -17,7 +17,10 @@ public enum CaptureArgumentParser {
             let option = args[index]
             switch option {
             case "--mode":
-                options.mode = AgentCaptureMode(rawValue: try nextValue(for: option)) ?? .fullscreen
+                guard let mode = AgentCaptureMode(rawValue: try nextValue(for: option)) else {
+                    throw ArgumentError.invalidValue(option, "expected fullscreen, display, window or region")
+                }
+                options.mode = mode
             case "--display-id", "--window-id":
                 let value = try nextValue(for: option)
                 guard let identifier = UInt32(value) else {
@@ -44,7 +47,7 @@ public enum CaptureArgumentParser {
             case "--base64":
                 options.includeBase64 = true
             default:
-                break
+                throw ArgumentError.invalidValue(option, "unknown capture option")
             }
             index += 1
         }

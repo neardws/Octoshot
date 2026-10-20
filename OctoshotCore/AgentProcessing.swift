@@ -4,7 +4,7 @@ import Foundation
 public enum AgentProcessing {
     public static func autoRedact(image: NSImage) async throws -> NSImage {
         let candidates = try await RedactionDetector.detect(in: image, settings: AgentConfiguration.redactionSettings())
-        return RedactionCompositor.apply(candidates.filter(\.isEnabled), to: image)
+        return try RedactionCompositor.apply(candidates.filter(\.isEnabled), to: image)
     }
 
     public static func askAI(image: NSImage, prompt: String) async throws -> String {
@@ -42,28 +42,34 @@ public enum AgentProcessing {
         )
     }
 
-    private static func convertMarkdownTableToCSV(_ markdown: String) -> String? {
+    static func convertMarkdownTableToCSV(_ markdown: String) -> String? {
         let lines = markdown.split(separator: "\n").map(String.init)
         let rows = lines.filter { $0.contains("|") && !$0.contains("---") }
         guard !rows.isEmpty else { return nil }
-        return rows.map { row in
-            row.split(separator: "|")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .joined(separator: ",")
-        }.joined(separator: "\n")
+        return CSVEncoder.encode(rows.map { row in
+            var fields = row.trimmingCharacters(in: .whitespaces).split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            if fields.first?.isEmpty == true { fields.removeFirst() }
+            if fields.last?.isEmpty == true { fields.removeLast() }
+            return fields.map { $0.trimmingCharacters(in: .whitespaces) }
+        })
     }
 }
 
 /// Applies redaction boxes by drawing solid black fills (agent-friendly; no pixelate shader).
 /// Keeps the source's pixel resolution. Candidate rects use a top-left origin, like the detector.
 public enum RedactionCompositor {
-    public static func apply(_ candidates: [RedactionCandidate], to image: NSImage) -> NSImage {
+    public static func apply(_ candidates: [RedactionCandidate], to image: NSImage) throws -> NSImage {
         let size = image.size
-        guard size.width > 0, size.height > 0,
-              let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
-        let space = source.colorSpace.flatMap { $0.supportsOutput ? $0 : nil }
-            ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
+              let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw CaptureError.captureFailed("Unable to decode image for redaction")
+        }
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard candidates.allSatisfy({ candidate in
+            let rect = candidate.rect
+            return [rect.origin.x, rect.origin.y, rect.width, rect.height].allSatisfy(\.isFinite)
+                && rect.size.width > 0 && rect.size.height > 0
+        }) else { throw CaptureError.captureFailed("Invalid redaction rectangle") }
         guard let context = CGContext(
             data: nil,
             width: source.width,
@@ -72,7 +78,7 @@ public enum RedactionCompositor {
             bytesPerRow: 0,
             space: space,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return image }
+        ) else { throw CaptureError.captureFailed("Unable to allocate redaction context") }
 
         let scaleX = CGFloat(source.width) / size.width
         let scaleY = CGFloat(source.height) / size.height
@@ -88,7 +94,7 @@ public enum RedactionCompositor {
                 height: rect.height * scaleY
             ))
         }
-        guard let output = context.makeImage() else { return image }
+        guard let output = context.makeImage() else { throw CaptureError.captureFailed("Unable to render redacted image") }
         return NSImage(cgImage: output, size: size)
     }
 }

@@ -21,18 +21,18 @@ final class RedactionCompositorTests: XCTestCase {
         return rep.colorAt(x: x, y: yFromTop)!.usingColorSpace(.deviceRGB)!.brightnessComponent
     }
 
-    func testFillsRectMeasuredFromTopLeft() {
+    func testFillsRectMeasuredFromTopLeft() throws {
         let candidate = RedactionCandidate(rect: CGRect(x: 0, y: 0, width: 50, height: 25), kind: .email, detail: "")
 
-        let output = RedactionCompositor.apply([candidate], to: whiteImage())
+        let output = try RedactionCompositor.apply([candidate], to: whiteImage())
 
         XCTAssertEqual(brightness(output, x: 10, yFromTop: 10), 0, accuracy: 0.01, "top-left corner is redacted")
         XCTAssertEqual(brightness(output, x: 10, yFromTop: 190), 1, accuracy: 0.01, "bottom-left corner is untouched")
         XCTAssertEqual(brightness(output, x: 110, yFromTop: 10), 1, accuracy: 0.01, "outside the rect is untouched")
     }
 
-    func testKeepsPixelResolution() {
-        let output = RedactionCompositor.apply([], to: whiteImage())
+    func testKeepsPixelResolution() throws {
+        let output = try RedactionCompositor.apply([], to: whiteImage())
         let cg = output.cgImage(forProposedRect: nil, context: nil, hints: nil)!
 
         XCTAssertEqual(output.size, NSSize(width: 200, height: 100))
@@ -61,7 +61,7 @@ final class RedactionCompositorTests: XCTestCase {
         let candidates = try await RedactionDetector.detect(in: image, settings: settings)
         try XCTSkipIf(candidates.isEmpty, "Text recognition found nothing on this machine")
 
-        let output = RedactionCompositor.apply(candidates, to: image)
+        let output = try RedactionCompositor.apply(candidates, to: image)
         let cg = output.cgImage(forProposedRect: nil, context: nil, hints: nil)!
         let scale = CGFloat(cg.width) / size.width
         // Middle of the email text, measured from the top: 400 - 340 - ~half the line height.
@@ -70,5 +70,28 @@ final class RedactionCompositorTests: XCTestCase {
 
         XCTAssertLessThan(brightness(output, x: Int(150 * scale), yFromTop: textRow), 0.05, "email is blacked out")
         XCTAssertGreaterThan(brightness(output, x: Int(150 * scale), yFromTop: bottomRow), 0.95, "mirrored area is untouched")
+    }
+
+    func testCMYKInputIsRedactedIntoRGB() throws {
+        let data = Data(repeating: 0, count: 16 * 16 * 4)
+        let provider = CGDataProvider(data: data as CFData)!
+        let source = CGImage(width: 16, height: 16, bitsPerComponent: 8, bitsPerPixel: 32,
+                             bytesPerRow: 64, space: CGColorSpaceCreateDeviceCMYK(), bitmapInfo: [],
+                             provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let image = NSImage(cgImage: source, size: NSSize(width: 16, height: 16))
+        let candidate = RedactionCandidate(rect: CGRect(x: 0, y: 0, width: 8, height: 8), kind: .email, detail: "")
+        let output = try RedactionCompositor.apply([candidate], to: image)
+        XCTAssertEqual(brightness(output, x: 2, yFromTop: 2), 0, accuracy: 0.01)
+        XCTAssertGreaterThan(brightness(output, x: 12, yFromTop: 12), 0.9)
+        XCTAssertEqual(output.cgImage(forProposedRect: nil, context: nil, hints: nil)?.colorSpace?.model, .rgb)
+    }
+
+    func testFailureThrowsInsteadOfReturningOriginalPixels() {
+        let image = whiteImage()
+        image.size = .zero
+        XCTAssertThrowsError(try RedactionCompositor.apply([], to: image))
+        XCTAssertThrowsError(try RedactionCompositor.apply([], to: NSImage(size: NSSize(width: 10, height: 10))))
+        let invalid = RedactionCandidate(rect: CGRect(x: 0, y: 0, width: -1, height: 2), kind: .email, detail: "")
+        XCTAssertThrowsError(try RedactionCompositor.apply([invalid], to: whiteImage()))
     }
 }

@@ -150,7 +150,7 @@ final class SpeculativeCapturePipeline {
         state.phase = .running(kind: .sensitive, detail: "Detecting sensitive data…")
         let candidates = try await RedactionDetector.detect(in: image, settings: AgentConfiguration.redactionSettings())
         let enabled = candidates.filter(\.isEnabled)
-        let redacted = RedactionCompositor.apply(enabled, to: image)
+        let redacted = try RedactionCompositor.apply(enabled, to: image)
         return .redactedImage(redacted)
     }
 

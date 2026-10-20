@@ -5,6 +5,7 @@ import OctoshotCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let hotkeyManager = HotkeyManager()
+    private var receivedAutomationURL = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = Updater.shared
@@ -45,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PermissionManager.installActivationRefresh()
         Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !receivedAutomationURL else { return }
             if !OnboardingStore.isComplete {
                 OnboardingPresenter.presentIfNeeded()
             } else {
@@ -59,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        if urls.contains(where: { $0.scheme?.lowercased() == "octoshot" }) { receivedAutomationURL = true }
         let caller = URLSchemeCaller.current()
         for url in urls {
             AgentURLRouter.handle(url, caller: caller)

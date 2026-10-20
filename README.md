@@ -228,6 +228,19 @@ Shipped Octoshot builds use Sparkle 2 to read the [site appcast](https://www.nea
 
 Issues and pull requests are welcome at [neardws/Octoshot](https://github.com/neardws/Octoshot). Run `xcodegen generate` before building; regenerate icons with `python3 Scripts/generate_icons.py` when needed.
 
+## Capture automation safety
+
+`record start` through CLI, MCP, or `octoshot://` asks for consent by default.
+Remembered URL consent is bound to the sending process's code-signing designated
+requirement, not just its bundle ID or path. Browsers and registered HTTP/HTTPS
+handlers cannot be permanently allowed; old string-only allow entries are ignored.
+The legacy global “Always allow” policy now asks unless the caller has a verified,
+remembered signature. Region recording requests also ask before opening selection.
+Capture output uses the configured PNG/JPEG encoding. Auto-generated names and
+extensionless CLI paths use `.png`/`.jpg`; an explicitly supplied extension is
+preserved even if it differs from the configured encoding. Auto-named files use
+exclusive creation and numbered suffixes to avoid overwriting other captures.
+
 ## License
 
 [MIT License](LICENSE) · Copyright © 2026 [neardws](https://github.com/neardws)

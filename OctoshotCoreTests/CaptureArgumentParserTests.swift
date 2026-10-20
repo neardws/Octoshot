@@ -34,6 +34,13 @@ final class CaptureArgumentParserTests: XCTestCase {
         }
     }
 
+    func testInvalidCaptureRequestsFailPreflight() {
+        XCTAssertThrowsError(try AgentCaptureOptions(mode: .window).validate())
+        XCTAssertThrowsError(try AgentCaptureOptions(mode: .region).validate())
+        XCTAssertThrowsError(try AgentCaptureOptions(mode: .region, region: CGRect(x: 0, y: 0, width: -1, height: 2)).validate())
+        XCTAssertThrowsError(try AgentCaptureOptions(mode: .region, region: CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 2)).validate())
+    }
+
     func testCompleteValidInvocation() throws {
         let options = try CaptureArgumentParser.parse([
             "--mode", "region", "--display-id", "42", "--window-id", "123",
@@ -73,15 +80,12 @@ final class CaptureArgumentParserTests: XCTestCase {
         }
     }
 
-    func testUnknownModeFallsBackToFullscreen() throws {
-        let options = try CaptureArgumentParser.parse(["--mode", "window", "--mode", "unknown"])
-        XCTAssertEqual(options.mode, .fullscreen)
+    func testUnknownModeIsRejected() {
+        XCTAssertThrowsError(try CaptureArgumentParser.parse(["--mode", "window", "--mode", "unknown"]))
     }
 
-    func testUnknownArgumentsAreIgnored() throws {
-        let options = try CaptureArgumentParser.parse(["--unknown", "value", "--base64", "extra"])
-        XCTAssertEqual(options.mode, .fullscreen)
-        XCTAssertTrue(options.includeBase64)
+    func testUnknownArgumentsAreRejected() {
+        XCTAssertThrowsError(try CaptureArgumentParser.parse(["--unknown", "value", "--base64", "extra"]))
     }
 
     func testRepeatedOptionsUseLastValueAndAcceptIdentifierBounds() throws {

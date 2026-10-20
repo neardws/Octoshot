@@ -23,17 +23,21 @@ final class AreaSelectionController: NSResponder {
     /// read the real screen instead of the dimmed overlay drawn on top of it.
     private(set) var frozenFrames: [CGDirectDisplayID: CGImage] = [:]
     private var freezeTask: Task<Void, Never>?
+    private var selectionFrame: CGRect?
 
-    func begin() {
+    func begin(displayID: UInt32? = nil, mode: AreaCaptureMode? = nil) {
         end()
+        if let mode { captureMode = mode }
         lastMouseGlobal = NSEvent.mouseLocation
-        for screen in NSScreen.screens {
+        let screens = NSScreen.screens.filter { displayID == nil || $0.displayID == displayID }
+        selectionFrame = displayID == nil ? nil : screens.first?.frame
+        for screen in screens {
             let window = AreaOverlayWindow(screen: screen)
             window.controller = self
             overlayWindows.append(window)
         }
         FullScreenOverlaySupport.presentCaptureOverlays(overlayWindows)
-        freezeFrames()
+        freezeFrames(displayIDs: Set(screens.map(\.displayID)))
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDragged]) { [weak self] event in
             guard let self else { return event }
@@ -91,14 +95,14 @@ final class AreaSelectionController: NSResponder {
     /// Captures each display without Octoshot's overlays, the one under the mouse first.
     /// The overlays are already up, so this runs in the background and the loupe appears
     /// once its display's frame arrives.
-    private func freezeFrames() {
+    private func freezeFrames(displayIDs: Set<UInt32>) {
         freezeTask = Task { @MainActor [weak self] in
             guard let content = try? await ScreenCaptureService.shared.shareableContent() else { return }
             let first = ScreenCaptureService.displayUnderMouse(in: content)?.displayID
             let displays = content.displays.filter { $0.displayID == first }
                 + content.displays.filter { $0.displayID != first }
-            for display in displays {
-                guard let image = try? await ScreenCaptureService.shared.captureDisplayImage(display, content: content),
+            for display in displays where displayIDs.contains(display.displayID) {
+                guard let image = try? await ScreenCaptureService.shared.captureDisplayImage(display, content: content, showsCursor: AppSettings.shared.captureShowCursor),
                       let self, !Task.isCancelled
                 else { return }
                 self.frozenFrames[display.displayID] = image
@@ -156,9 +160,10 @@ final class AreaSelectionController: NSResponder {
             cancel()
             return
         }
-        let rect = DisplayGeometry.normalizedSelection(from: start, to: point)
+        var rect = DisplayGeometry.normalizedSelection(from: start, to: point)
+        if let selectionFrame { rect = rect.intersection(selectionFrame) }
         end()
-        if rect.width >= 2, rect.height >= 2 {
+        if !rect.isNull, rect.width.isFinite, rect.height.isFinite, rect.width >= 2, rect.height >= 2 {
             if AppSettings.shared.rememberAreaCaptureMode {
                 AppSettings.shared.lastAreaCaptureMode = captureMode
             }

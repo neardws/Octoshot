@@ -33,9 +33,20 @@ public final class ScreenCaptureService {
 
     /// The display under the mouse pointer, falling back to the main display.
     public static func displayUnderMouse(in content: SCShareableContent) -> SCDisplay? {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        return content.displays.first { $0.displayID == screen?.displayID } ?? content.displays.first
+        display(at: NSEvent.mouseLocation, in: content)
+    }
+
+    public static func display(at point: CGPoint, in content: SCShareableContent) -> SCDisplay? {
+        let identifier = displayID(at: point)
+        return content.displays.first { $0.displayID == identifier }
+    }
+
+    public static func displayID(at point: CGPoint) -> CGDirectDisplayID? {
+        (NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main)?.displayID
+    }
+
+    public static func screen(for displayID: UInt32) -> NSScreen? {
+        NSScreen.screens.first { $0.displayID == displayID }
     }
 
     /// A display filter that leaves out Octoshot's own floating UI (see `capturableOwnWindowIDs`).
@@ -57,7 +68,7 @@ public final class ScreenCaptureService {
     public func captureDisplayImage(
         _ display: SCDisplay,
         content: SCShareableContent,
-        showsCursor: Bool = false
+        showsCursor: Bool = AgentConfiguration.captureShowCursor
     ) async throws -> CGImage {
         let scale = screenForDisplayID(display.displayID)?.backingScaleFactor ?? 2.0
         let filter = await displayFilter(for: display, content: content)
@@ -65,21 +76,23 @@ public final class ScreenCaptureService {
         config.width = Int(CGFloat(display.width) * scale)
         config.height = Int(CGFloat(display.height) * scale)
         config.showsCursor = showsCursor
+        config.ignoreShadowsDisplay = !AgentConfiguration.captureWindowWithShadow
         config.captureResolution = .best
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 
     /// Captures `display`, or the display under the mouse when `display` is nil.
-    public func captureFullscreen(display: SCDisplay? = nil, showsCursor: Bool = false) async throws -> NSImage {
+    public func captureFullscreen(display: SCDisplay? = nil, showsCursor: Bool = AgentConfiguration.captureShowCursor) async throws -> NSImage {
+        let selectedID = display?.displayID ?? Self.displayID(at: NSEvent.mouseLocation)
         let content = try await shareableContent()
-        guard let targetDisplay = display ?? Self.displayUnderMouse(in: content) else {
+        guard let targetDisplay = content.displays.first(where: { $0.displayID == selectedID }) else {
             throw CaptureError.noDisplays
         }
         let cgImage = try await captureDisplayImage(targetDisplay, content: content, showsCursor: showsCursor)
         return NSImage(cgImage: cgImage, size: NSSize(width: targetDisplay.width, height: targetDisplay.height))
     }
 
-    public func captureWindow(_ window: SCWindow, includeShadow: Bool = true, showsCursor: Bool = false) async throws -> NSImage {
+    public func captureWindow(_ window: SCWindow, includeShadow: Bool = AgentConfiguration.captureWindowWithShadow, showsCursor: Bool = AgentConfiguration.captureShowCursor) async throws -> NSImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         // With the shadow, the filter's `contentRect` is larger than `window.frame`; size the output
         // from it so the image is not squeezed.
@@ -95,12 +108,14 @@ public final class ScreenCaptureService {
         return NSImage(cgImage: cgImage, size: rect.size)
     }
 
-    public func captureRegion(globalRect: CGRect, showsCursor: Bool = false) async throws -> NSImage {
+    public func captureRegion(globalRect: CGRect, showsCursor: Bool = AgentConfiguration.captureShowCursor, displayID: UInt32? = nil) async throws -> NSImage {
+        try CaptureDisplaySelection.validateActive(displayID)
         guard globalRect.width >= 2, globalRect.height >= 2 else {
             throw CaptureError.emptySelection
         }
         let content = try await shareableContent()
-        let screens = NSScreen.screens
+        try CaptureDisplaySelection.validate(displayID, available: content.displays.map(\.displayID))
+        let screens = NSScreen.screens.filter { displayID == nil || $0.displayID == displayID }
         var pieces: [(CGRect, NSImage)] = []
 
         for screen in screens {
@@ -119,6 +134,7 @@ public final class ScreenCaptureService {
             config.width = Int(intersection.width * scale)
             config.height = Int(intersection.height * scale)
             config.showsCursor = showsCursor
+            config.ignoreShadowsDisplay = !AgentConfiguration.captureWindowWithShadow
             config.captureResolution = .best
             let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
             let piece = NSImage(cgImage: cgImage, size: intersection.size)
