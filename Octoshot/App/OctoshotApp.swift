@@ -2,6 +2,16 @@ import SwiftUI
 import OctoshotCore
 
 @main
+enum OctoshotMain {
+    @MainActor
+    static func main() {
+        #if DEBUG
+        QuickAccessSnapshotHarness.runIfRequested()
+        #endif
+        OctoshotApp.main()
+    }
+}
+
 struct OctoshotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 

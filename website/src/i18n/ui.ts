@@ -9,6 +9,7 @@ export type MascotCardCopy = {
   name: string;
   labelSpecies: string;
   species: string;
+  speciesFact: string;
   labelPersonality: string;
   personality: string;
   labelCatchphrase: string;
@@ -105,7 +106,9 @@ const en: LandingCopy = {
     labelName: 'Name',
     name: '一酱 (Yijiang)',
     labelSpecies: 'Species',
-    species: 'Original cartoon red octopus',
+    species: 'East Pacific red octopus (Octopus rubescens)',
+    speciesFact:
+      'Real-life O. rubescens: small, nosy, and red in a blink. Don’t flatter yourself—the red means you’re bugging me. Job’s still getting done.',
     labelPersonality: 'Personality',
     personality: 'Low-energy, a little grumpy; reliable when it counts',
     labelCatchphrase: 'Catchphrase',
@@ -250,7 +253,9 @@ const zh: LandingCopy = {
     labelName: '名字',
     name: '一酱',
     labelSpecies: '物种',
-    species: '原创红色卡通章鱼',
+    species: '东太平洋红章鱼（Octopus rubescens）',
+    speciesFact:
+      '真·东太平洋红章鱼：个子小、好奇心重，一激动瞬间红透。别多想，红是被你烦的——活我照样干完。',
     labelPersonality: '性格',
     personality: '低能量、略嫌弃；嘴上吐槽，手上靠谱',
     labelCatchphrase: '口头禅',

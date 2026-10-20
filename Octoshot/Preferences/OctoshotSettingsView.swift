@@ -200,6 +200,10 @@ private struct CaptureSettingsPane: View {
                     }
                 }
                 Toggle(OctoshotL10n.quickAccessStackCaptures, isOn: $settings.quickAccessStackCaptures)
+                Picker(OctoshotL10n.quickAccessToolbarTitle, selection: $settings.quickAccessToolbarStyle) {
+                    Text(OctoshotL10n.quickAccessToolbarBelow).tag(QuickAccessToolbarStyle.below)
+                    Text(OctoshotL10n.quickAccessToolbarRing).tag(QuickAccessToolbarStyle.bubbles)
+                }
                 HStack {
                     Text("Auto-close delay")
                     Slider(value: $settings.quickAccessAutoCloseSeconds, in: 0...120, step: 5)

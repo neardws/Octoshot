@@ -1,6 +1,48 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source("../");
+
+@theme {
+  --color-mb-bg: var(--bg);
+  --color-mb-bg-alt: var(--bg-alt);
+  --color-mb-tile: var(--tile);
+  --color-mb-tile-on-alt: var(--tile-on-alt);
+  --color-mb-fg: var(--fg);
+  --color-mb-fg2: var(--fg2);
+  --color-mb-fg3: var(--fg3);
+  --color-mb-hair: var(--hair);
+  --color-mb-line: var(--line);
+  --color-mb-link: var(--link);
+  --color-mb-btn: var(--btn);
+  --color-mb-btn-hover: var(--btn-hover);
+  --color-mb-focus: var(--focus);
+  --color-mb-nav: var(--nav);
+  --color-mb-nav-fg: var(--nav-fg);
+  --color-mb-paddle: var(--paddle);
+  --color-mb-key: var(--key);
+  --color-mb-key-edge: var(--key-edge);
+  --color-mb-brand-red: var(--brand-red);
+  --color-mb-brand-red-soft: var(--brand-red-soft);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --container-content: 1040px;
+  --container-narrow: 720px;
+  --radius-tile: 28px;
+  --radius-shot: 18px;
+  --radius-pill: 980px;
+  --ease-mb: cubic-bezier(.32,.72,0,1);
+  --shadow-shot: var(--shot-shadow);
+  --default-ring-width: 3px;
+  --default-ring-color: rgb(59 130 246 / 0.5);
+}
+
+@custom-variant hover (&:hover);
+
+@utility legacy-space-y-* {
+  & > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(--value(integer) * 0.25rem * (1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(--value(integer) * 0.25rem * var(--tw-space-y-reverse));
+  }
+}
 
 :root {
   --bg: #ffffff;
@@ -59,6 +101,25 @@
 }
 
 @layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: #e5e7eb;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    opacity: 1;
+    color: #9ca3af;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
   html {
     scroll-behavior: smooth;
   }
@@ -78,15 +139,6 @@
     line-height: 1.5;
     word-break: keep-all;
     line-break: strict;
-  }
-
-  :lang(zh) h1,
-  :lang(zh) h2,
-  :lang(zh) .h2,
-  :lang(zh-CN) h1,
-  :lang(zh-CN) h2,
-  :lang(zh-CN) .h2 {
-    letter-spacing: 0;
   }
 
   :focus-visible {
@@ -109,6 +161,15 @@
     left: 1rem;
     top: 1rem;
   }
+}
+
+:lang(zh) h1,
+:lang(zh) h2,
+:lang(zh) .h2,
+:lang(zh-CN) h1,
+:lang(zh-CN) h2,
+:lang(zh-CN) .h2 {
+  letter-spacing: 0;
 }
 
 @layer components {

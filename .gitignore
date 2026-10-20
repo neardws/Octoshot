@@ -11,6 +11,7 @@ dist/
 .derivedData/
 .derivedData-release
 build/
+build-qa/
 .build/sparkle/
 
 # Sparkle EdDSA private keys (never commit)

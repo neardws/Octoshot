@@ -8,9 +8,16 @@ interface Props {
 
 const { card } = Astro.props;
 
-const rows: { label: string; value: string }[] = [
+const latinNames = ['Octopus rubescens', 'O. rubescens'];
+const splitLatinNames = (text: string) =>
+  text.split(/(Octopus rubescens|O\. rubescens)/g).map((text) => ({
+    text,
+    italic: latinNames.includes(text),
+  }));
+
+const rows: { label: string; value: string; fact?: string }[] = [
   { label: card.labelName, value: card.name },
-  { label: card.labelSpecies, value: card.species },
+  { label: card.labelSpecies, value: card.species, fact: card.speciesFact },
   { label: card.labelPersonality, value: card.personality },
   { label: card.labelCatchphrase, value: card.catchphrase },
   { label: card.labelRole, value: card.role },
@@ -18,7 +25,7 @@ const rows: { label: string; value: string }[] = [
 ---
 
 <aside
-  class="mascot-card rounded-tile border border-mb-hair bg-mb-tile p-6 text-left shadow-sm md:p-7"
+  class="mascot-card rounded-tile border border-mb-hair bg-mb-tile p-6 text-left shadow-xs md:p-7"
   aria-label={card.ariaLabel}
 >
   <div class="flex items-start gap-4">
@@ -28,12 +35,21 @@ const rows: { label: string; value: string }[] = [
       <p class="mt-1 text-[22px] font-semibold leading-tight text-mb-fg">{card.name}</p>
     </div>
   </div>
-  <dl class="mt-5 space-y-3 text-[15px]">
+  <dl class="mt-5 legacy-space-y-3 text-[15px]">
     {
       rows.slice(1).map((row) => (
         <div>
           <dt class="font-semibold text-mb-fg">{row.label}</dt>
-          <dd class="mt-0.5 text-mb-fg2">{row.value}</dd>
+          <dd class="mt-0.5 text-mb-fg2">
+            {row.fact
+              ? splitLatinNames(row.value).map((part) => (part.italic ? <i>{part.text}</i> : part.text))
+              : row.value}
+            {row.fact && (
+              <p class="mt-2 border-t border-mb-hair pt-2 text-[13px] leading-relaxed text-mb-fg2">
+                {splitLatinNames(row.fact).map((part) => (part.italic ? <i>{part.text}</i> : part.text))}
+              </p>
+            )}
+          </dd>
         </div>
       ))
     }
