@@ -4,28 +4,29 @@ import Vision
 public enum OCRService {
     public static func recognizeText(in image: NSImage) async throws -> AgentOCRResult {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return AgentOCRResult(text: "", lines: [])
+            return result(from: [])
         }
-        return try await withCheckedThrowingContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                let text = lines.joined(separator: "\n")
-                continuation.resume(returning: AgentOCRResult(text: text, lines: lines))
-            }
+        return try await recognizeText { request in
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try handler.perform([request])
+        }
+    }
+
+    internal static func recognizeText(
+        perform: @escaping @Sendable (VNRequest) throws -> Void
+    ) async throws -> AgentOCRResult {
+        try await Task.detached {
+            let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["zh-Hans", "en-US"]
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+            try perform(request)
+            let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            return result(from: lines)
+        }.value
+    }
+
+    internal static func result(from lines: [String]) -> AgentOCRResult {
+        AgentOCRResult(text: lines.joined(separator: "\n"), lines: lines)
     }
 }
