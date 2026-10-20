@@ -105,7 +105,7 @@
 "Ask every time" = "每次询问";
 "Always allow" = "始终允许";
 "Off" = "关闭";
-"Any app or web page can open octoshot:// links. With “Ask every time”, Octoshot confirms before a link takes a screenshot or starts a recording on its own. Links that open area or window selection always run, and stopping a recording is always allowed." = "任何应用或网页都能打开 octoshot:// 链接。选择“每次询问”时，链接若要直接截图或开始录屏，一酱会先征求你的同意。打开区域或窗口选择的链接会直接执行，停止录屏也始终允许。";
+"Any app or web page can open octoshot:// links. Octoshot asks before a link takes a full-screen or display screenshot or starts a recording (including area recording), unless you ticked “Always allow” for that app in the prompt. Approved apps are verified by code signature, web browsers can't be approved, and the “Always allow” setting still asks every other app. Screenshot links that only open area or window selection don't ask, because nothing is captured until you select. Stopping a recording is always allowed; “Off” ignores all other links." = "任何应用或网页都能打开 octoshot:// 链接。链接要截取全屏或指定显示器，或开始录屏（包括区域录屏）时，一酱会先征求你的同意，除非你曾在确认框中对该应用勾选“始终允许”。已允许的应用按代码签名校验，网页浏览器无法设为始终允许；即使选择“始终允许”策略，其他应用仍需确认。仅打开区域或窗口选择的截图链接不会询问，因为在你完成选择前不会截图。停止录屏始终允许；选择“关闭”时会忽略其他所有链接。";
 "Forget always-allowed apps (%d)" = "清除始终允许的应用（%d）";
 "URL scheme (octoshot://)" = "URL 协议（octoshot://）";
 "Toolbar style" = "工具栏样式";

@@ -170,7 +170,7 @@ enum OctoshotL10n {
     }
 
     static var urlSchemeExplanation: String {
-        text("Any app or web page can open octoshot:// links. With “Ask every time”, Octoshot confirms before a link takes a screenshot or starts a recording on its own. Links that open area or window selection always run, and stopping a recording is always allowed.",
+        text("Any app or web page can open octoshot:// links. Octoshot asks before a link takes a full-screen or display screenshot or starts a recording (including area recording), unless you ticked “Always allow” for that app in the prompt. Approved apps are verified by code signature, web browsers can't be approved, and the “Always allow” setting still asks every other app. Screenshot links that only open area or window selection don't ask, because nothing is captured until you select. Stopping a recording is always allowed; “Off” ignores all other links.",
             comment: "URL scheme settings explanation"
         )
     }
