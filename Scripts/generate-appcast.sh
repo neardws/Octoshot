@@ -52,6 +52,8 @@ fi
   -o "$STAGE/appcast.xml" \
   "$STAGE"
 
+python3 Scripts/check-arm64-appcast.py "$STAGE/appcast.xml"
+
 mkdir -p website/public
 cp "$STAGE/appcast.xml" website/public/appcast.xml
 

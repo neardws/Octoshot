@@ -4,6 +4,8 @@
 
 [Octoshot](https://github.com/neardws/Octoshot) 是一款开源（MIT）的 macOS 原生截图工具：基于 Swift、SwiftUI + AppKit 与 ScreenCaptureKit，强调**本机处理**与**隐私优先**，面向科研写作者与开发者。菜单栏常驻、无 Dock 图标；简体中文系统下显示名为 **一酱**。应用图标为原创卡通章鱼 mascot（半眯眼、略带嫌弃的表情，举着取景框——与任何既有版权角色无关）。
 
+正式发布版本仅支持 Apple Silicon（arm64）；Intel Mac 请保留旧版。内置 MLX 与 llama AI 均仅支持 Apple Silicon。
+
 ## 现已可用
 
 - **区域 / 窗口 / 全屏**截图与全局快捷键；区域选择时 **模式条**（S 截图 / R 滚动拼接 / V 视频 / G GIF / L LaTeX / T 图或表）
@@ -142,7 +144,7 @@ tccutil reset ScreenCapture com.neardws.Octoshot
 - **Settings** sidebar: General, Shortcuts, Capture, **Recording**, Annotation, AI, Developer (Agent/CLI), About — version in the sidebar footer
 - **First-run onboarding**: Screen Recording, shortcut takeover, optional Ollama setup
 - **Menu bar**: shortcuts beside capture actions, recent files, open save folder, Clips library browser
-- **Embedded local AI**: SmolVLM2-500M MLX 4-bit (~292MB) + pix2tex-mfr Q4 (~18MB) on-demand downloads to Application Support; Settings → AI progress & disk usage; optional Ollama fallback (off by default when embedded models are installed)
+- **Embedded local AI (Apple Silicon only)**: SmolVLM2-500M MLX 4-bit (~292MB) + pix2tex-mfr Q4 (~18MB) on-demand downloads to Application Support; Settings → AI progress & disk usage; optional Ollama fallback (off by default when embedded models are installed). Release builds of the app and CLI are arm64-only; Intel Macs must stay on an older release.
 - **macOS screenshot hotkeys**: reads `symbolichotkeys.plist`, optional ⌘⇧3/4/5 takeover with Keyboard settings guidance
 
 ## Roadmap
@@ -187,6 +189,7 @@ MCP tools: `capture_screen`, `capture_window`, `list_windows`, `list_displays`, 
 - **Vision**: `mlx-community/SmolVLM2-500M-Video-Instruct-mlx-4bit` via pinned [mlx-swift-lm 2.29.3](https://github.com/ml-explore/mlx-swift-lm) (`MLXVLM` + `MLXLMCommon` in `project.yml`).
 - **LaTeX**: `cstr/pix2tex-mfr-gguf` via bundled or auto-downloaded `llama-mtmd-cli` (`Scripts/fetch-llama-mtmd.sh`, Application Support fallback).
 - **CI** does not download ML weights; builds MLX on macOS Apple Silicon when `EMBEDDED_MLX=1` (see `Config/EmbeddedAI.xcconfig`).
+- **Bundled llama runtime**: only `llama-mtmd-cli` and its nine runtime libraries (including CPU, BLAS, Metal, and RPC backends), with version aliases preserved as symlinks. Offline builds can run `LLAMA_TARBALL=/path/to/llama-b11514-bin-macos-arm64.tar.gz bash Scripts/fetch-llama-mtmd.sh`. Refresh an older helper cache once before rebuilding.
 
 ## Requirements
 

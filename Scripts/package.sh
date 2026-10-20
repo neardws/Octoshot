@@ -21,7 +21,7 @@ fi
 echo "🔏 Signing identity: $SIGN_IDENTITY"
 
 # llama-mtmd-cli (optional; embed script warns if missing)
-if [ ! -x build/llama-mtmd/bin/llama-mtmd-cli ] && [ -x Scripts/fetch-llama-mtmd.sh ]; then
+if { [ ! -x build/llama-mtmd/bin/llama-mtmd-cli ] || [ ! -L build/llama-mtmd/bin/libggml.dylib ]; } && [ -x Scripts/fetch-llama-mtmd.sh ]; then
   bash Scripts/fetch-llama-mtmd.sh || true
 fi
 [ -x build/llama-mtmd/bin/llama-mtmd-cli ] || echo "warning: llama-mtmd-cli missing; LaTeX helper may be incomplete"
@@ -80,6 +80,7 @@ if [ -d "$APP/Contents/Helpers" ]; then
   while IFS= read -r -d '' item; do
     [ -x "$item" ] || continue
     case "$(basename "$item")" in
+      *.dylib) continue ;;
       octoshot) sign --identifier com.neardws.octoshot-cli "$item" ;;
       llama-mtmd-cli) sign --identifier com.neardws.octoshot.llama-mtmd-cli "$item" ;;
       *) sign "$item" ;;
@@ -93,7 +94,7 @@ fi
 sign_sparkle_nested
 while IFS= read -r -d '' fw; do sign "$fw"; done < <(find "$APP/Contents/Frameworks" -name '*.framework' -maxdepth 1 -print0 2>/dev/null || true)
 sign --entitlements "$ENT" "$APP"
-codesign --verify --strict --verbose=2 "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
 
 notarize() {
   local file="$1" log="$DIST/notary-$(basename "$1").log" i
