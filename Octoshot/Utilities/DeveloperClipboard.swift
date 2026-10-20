@@ -8,8 +8,13 @@ enum DeveloperClipboard {
     static func copyMarkdownSnippet(
         for image: NSImage,
         existingURL: URL? = nil
-    ) throws -> URL {
-        let url = try existingURL ?? writeCaptureToDefaultLocation(image: image)
+    ) async throws -> URL {
+        let url: URL
+        if let existingURL {
+            url = existingURL
+        } else {
+            url = try await writeCaptureToDefaultLocation(image: image)
+        }
         let link = markdownLink(for: url)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -17,8 +22,13 @@ enum DeveloperClipboard {
         return url
     }
 
-    static func copyFilePath(for image: NSImage, existingURL: URL? = nil) throws -> URL {
-        let url = try existingURL ?? writeCaptureToDefaultLocation(image: image)
+    static func copyFilePath(for image: NSImage, existingURL: URL? = nil) async throws -> URL {
+        let url: URL
+        if let existingURL {
+            url = existingURL
+        } else {
+            url = try await writeCaptureToDefaultLocation(image: image)
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.path, forType: .string)
         return url
@@ -36,10 +46,10 @@ enum DeveloperClipboard {
         return "![\(alt)](\(pathComponent))"
     }
 
-    private static func writeCaptureToDefaultLocation(image: NSImage) throws -> URL {
+    private static func writeCaptureToDefaultLocation(image: NSImage) async throws -> URL {
         let settings = AppSettings.shared
         let url = settings.defaultSaveURL()
-        return try ImageFormats.writeUnique(
+        return try await ImageFormats.writeUniqueAsync(
             image: image,
             to: url,
             format: settings.format,

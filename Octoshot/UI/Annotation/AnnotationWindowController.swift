@@ -19,6 +19,7 @@ final class AnnotationWindowController {
     private var redactionCandidates: [RedactionCandidate] = []
     private var currentImage: NSImage?
     private var lastSavedURL: URL?
+    private var lastSavedImage: NSImage?
 
     init() {
         window = NSWindow(
@@ -153,7 +154,7 @@ final class AnnotationWindowController {
     }
 
     private func showOCR() {
-        guard let image = canvasView?.currentImage() ?? currentImage else { return }
+        guard let image = exportImage() else { return }
         FeatureCoordinator.shared.showOCR(with: image)
     }
 
@@ -220,49 +221,71 @@ final class AnnotationWindowController {
         redactionPanel = panel
     }
 
+    private func exportImage() -> NSImage? {
+        do {
+            return try canvasView?.currentImage()
+        } catch {
+            NSAlert(error: error).runModal()
+            return nil
+        }
+    }
+
     private func copyImage() {
-        guard let image = canvasView?.currentImage() else { return }
-        ImageFormats.copyToPasteboard(image)
+        guard let image = exportImage() else { return }
+        ImageExportActions.copy(image)
     }
 
     private func pinImage() {
-        guard let image = canvasView?.currentImage() else { return }
+        guard let image = exportImage() else { return }
         PinnedScreenshotManager.shared.pin(image: image)
     }
 
     private func saveImage() {
-        guard let image = canvasView?.currentImage() else { return }
+        guard let image = exportImage() else { return }
         let url = AppSettings.shared.defaultSaveURL(prefix: "Annotated")
-        do {
-            let actualURL = try ImageFormats.writeUnique(
-                image: image,
-                to: url,
-                format: AppSettings.shared.format,
-                jpegQuality: AppSettings.shared.jpegQuality
-            )
-            lastSavedURL = actualURL
-        } catch {
-            NSAlert(error: error).runModal()
+        let format = AppSettings.shared.format
+        let quality = AppSettings.shared.jpegQuality
+        ImageExportActions.perform {
+            do {
+                let actualURL = try await ImageFormats.writeUniqueAsync(
+                    image: image,
+                    to: url,
+                    format: format,
+                    jpegQuality: quality
+                )
+                self.lastSavedURL = actualURL
+                self.lastSavedImage = image
+            } catch {
+                NSAlert(error: error).runModal()
+            }
         }
     }
 
     private func copyMarkdown() {
-        guard let image = canvasView?.currentImage() else { return }
-        do {
-            let url = try DeveloperClipboard.copyMarkdownSnippet(for: image, existingURL: lastSavedURL)
-            lastSavedURL = url
-        } catch {
-            NSAlert(error: error).runModal()
+        guard let image = exportImage() else { return }
+        ImageExportActions.perform {
+            do {
+                let existingURL = self.lastSavedImage === image ? self.lastSavedURL : nil
+                let url = try await DeveloperClipboard.copyMarkdownSnippet(for: image, existingURL: existingURL)
+                self.lastSavedURL = url
+                self.lastSavedImage = image
+            } catch {
+                NSAlert(error: error).runModal()
+            }
         }
     }
 
     private func copyFilePath() {
-        guard let image = canvasView?.currentImage() else { return }
-        do {
-            let url = try DeveloperClipboard.copyFilePath(for: image, existingURL: lastSavedURL)
-            lastSavedURL = url
-        } catch {
-            NSAlert(error: error).runModal()
+        guard let image = exportImage() else { return }
+        ImageExportActions.perform {
+            do {
+                let existingURL = self.lastSavedImage === image ? self.lastSavedURL : nil
+                let url = try await DeveloperClipboard.copyFilePath(for: image, existingURL: existingURL)
+                self.lastSavedURL = url
+                self.lastSavedImage = image
+            } catch {
+                NSAlert(error: error).runModal()
+            }
         }
     }
 }

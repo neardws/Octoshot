@@ -181,7 +181,7 @@ actor MCPStdioServer {
             let specData = try JSONSerialization.data(withJSONObject: specValue.toJSONObject())
             let spec = try JSONDecoder().decode(AgentAnnotationSpec.self, from: specData)
             let image = try AgentCaptureEngine.loadImage(path: path)
-            let annotated = AnnotationRenderer.apply(spec: spec, to: image)
+            let annotated = try AnnotationRenderer.apply(spec: spec, to: image)
             let out = str("output").map { URL(fileURLWithPath: $0) }
                 ?? AgentConfiguration.saveDirectory.appendingPathComponent("annotated-\(UUID().uuidString).png")
             try ImageFormats.writePNG(image: annotated, to: out)

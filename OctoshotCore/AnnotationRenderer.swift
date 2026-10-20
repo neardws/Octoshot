@@ -2,20 +2,20 @@ import AppKit
 import CoreImage
 
 public enum AnnotationRenderer {
-    public static func apply(spec: AgentAnnotationSpec, to image: NSImage) -> NSImage {
+    public static func apply(spec: AgentAnnotationSpec, to image: NSImage, renderer: RedactionRenderer = .shared) throws -> NSImage {
         let size = image.size
         let output = NSImage(size: size)
         output.lockFocus()
+        defer { output.unlockFocus() }
         image.draw(in: NSRect(origin: .zero, size: size))
         let canvas = NSRect(origin: .zero, size: size)
         for item in spec.annotations {
-            draw(item: item, in: canvas, sourceImage: image)
+            try draw(item: item, in: canvas, sourceImage: image, renderer: renderer)
         }
-        output.unlockFocus()
         return output
     }
 
-    private static func draw(item: AgentAnnotationSpec.Item, in canvas: NSRect, sourceImage: NSImage) {
+    private static func draw(item: AgentAnnotationSpec.Item, in canvas: NSRect, sourceImage: NSImage, renderer: RedactionRenderer) throws {
         let color = parseColor(item.color) ?? .systemRed
         let width = CGFloat(item.lineWidth ?? 4)
         switch item.type {
@@ -104,13 +104,13 @@ public enum AnnotationRenderer {
             let origin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
             label.draw(at: origin, withAttributes: [.font: font, .foregroundColor: NSColor.white])
         case .pixelate:
-            guard let from = item.from, let to = item.to, from.count >= 2, to.count >= 2 else { return }
+            guard let from = item.from, let to = item.to, from.count >= 2, to.count >= 2 else { throw RedactionError.invalidRegion }
             let region = rect(from: from, to: to)
-            drawPixelate(in: region, source: canvas, sourceImage: sourceImage)
+            try drawRedaction(in: region, source: canvas, sourceImage: sourceImage, renderer: renderer, kind: .pixelate)
         case .blur:
-            guard let from = item.from, let to = item.to, from.count >= 2, to.count >= 2 else { return }
+            guard let from = item.from, let to = item.to, from.count >= 2, to.count >= 2 else { throw RedactionError.invalidRegion }
             let region = rect(from: from, to: to)
-            drawBlur(in: region, source: canvas, sourceImage: sourceImage)
+            try drawRedaction(in: region, source: canvas, sourceImage: sourceImage, renderer: renderer, kind: .blur)
         }
     }
 
@@ -152,47 +152,13 @@ public enum AnnotationRenderer {
         path.stroke()
     }
 
-    private static func drawPixelate(in region: NSRect, source: NSRect, sourceImage: NSImage) {
-        guard let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        guard region.width > 2, region.height > 2 else { return }
-        let scaleX = CGFloat(cg.width) / source.width
-        let scaleY = CGFloat(cg.height) / source.height
-        let crop = CGRect(
-            x: region.origin.x * scaleX,
-            y: CGFloat(cg.height) - (region.origin.y + region.height) * scaleY,
-            width: region.width * scaleX,
-            height: region.height * scaleY
-        ).integral
-        guard let cropped = cg.cropping(to: crop) else { return }
-        let ci = CIImage(cgImage: cropped)
-        guard let filter = CIFilter(name: "CIPixellate") else { return }
-        filter.setValue(ci, forKey: kCIInputImageKey)
-        filter.setValue(12, forKey: kCIInputScaleKey)
-        guard let output = filter.outputImage else { return }
-        let context = CIContext()
-        guard let pix = context.createCGImage(output, from: output.extent) else { return }
-        NSImage(cgImage: pix, size: region.size).draw(in: region)
-    }
-
-    private static func drawBlur(in region: NSRect, source: NSRect, sourceImage: NSImage) {
-        guard let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        guard region.width > 2, region.height > 2 else { return }
-        let scaleX = CGFloat(cg.width) / source.width
-        let scaleY = CGFloat(cg.height) / source.height
-        let crop = CGRect(
-            x: region.origin.x * scaleX,
-            y: CGFloat(cg.height) - (region.origin.y + region.height) * scaleY,
-            width: region.width * scaleX,
-            height: region.height * scaleY
-        ).integral
-        guard let cropped = cg.cropping(to: crop) else { return }
-        let ci = CIImage(cgImage: cropped)
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return }
-        filter.setValue(ci, forKey: kCIInputImageKey)
-        filter.setValue(14, forKey: kCIInputRadiusKey)
-        guard let output = filter.outputImage else { return }
-        let context = CIContext()
-        guard let blurred = context.createCGImage(output, from: output.extent) else { return }
-        NSImage(cgImage: blurred, size: region.size).draw(in: region)
+    private static func drawRedaction(in region: NSRect, source: NSRect, sourceImage: NSImage,
+                                      renderer: RedactionRenderer, kind: RedactionRenderer.Kind) throws {
+        guard let image = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw RedactionError.unavailableSource
+        }
+        let patch = try renderer.patch(source: image, region: region, canvasSize: source.size,
+                                       kind: kind, topLeftOrigin: false)
+        NSImage(cgImage: patch, size: region.size).draw(in: region)
     }
 }

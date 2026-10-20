@@ -29,7 +29,61 @@ targets:
       - path: Octoshot/UI/Annotation/AnnotationCanvasView.swift
     dependencies:
       - target: OctoshotCore
+  OctoshotEmbeddedMLX:
+    type: framework
+    platform: macOS
+    sources: [OctoshotEmbeddedMLX]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.neardws.OctoshotEmbeddedMLX
+  octoshot-cli:
+    type: tool
+    platform: macOS
+    sources: [octoshot-cli]
+    dependencies:
+      - target: OctoshotCore
+    settings:
+      PRODUCT_NAME: octoshot
+      INFOPLIST_FILE: octoshot-cli/Info.plist
+      CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+  OctoshotCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: OctoshotCoreTests
+      - path: Octoshot/UI/Annotation/AnnotationModels.swift
+      - path: Octoshot/UI/Annotation/AnnotationDrawing.swift
+      - path: Octoshot/UI/Annotation/AnnotationCanvasView.swift
+    dependencies:
+      - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
 schemes:
+  octoshot-cli:
+    build:
+      targets:
+        octoshot-cli: all
+    run:
+      config: Debug
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
+  OctoshotCoreTests:
+    build:
+      targets:
+        OctoshotCoreTests: all
+    test:
+      config: Debug
+      targets: [OctoshotCoreTests]
+    run:
+      config: Debug
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
   octoshot-export-bench:
     build:
       targets:

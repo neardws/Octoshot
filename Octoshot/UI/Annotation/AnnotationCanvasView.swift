@@ -4,7 +4,12 @@ import OctoshotCore
 
 final class AnnotationCanvasView: NSView {
     var baseImage: NSImage? {
-        didSet { rebuildComposite(); needsDisplay = true }
+        didSet {
+            redactionRenderer.invalidate()
+            sourceCGImage = baseImage?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            rebuildComposite()
+            needsDisplay = true
+        }
     }
 
     var strokes: [AnnotationStroke] = [] {
@@ -40,6 +45,9 @@ final class AnnotationCanvasView: NSView {
     private var measureStart: CGPoint?
     private var measureEnd: CGPoint?
     private var renderedImage: NSImage?
+    private var sourceCGImage: CGImage?
+    var redactionRenderer = RedactionRenderer()
+    private(set) var renderingError: Error?
     private var redoStrokes: [AnnotationStroke] = []
     private var cropUndoStack: [(image: NSImage, strokes: [AnnotationStroke], redactions: [CGRect])] = []
     private var cropRedoStack: [(image: NSImage, strokes: [AnnotationStroke], redactions: [CGRect])] = []
@@ -126,13 +134,21 @@ final class AnnotationCanvasView: NSView {
         if stroke.tool.usesFreehand {
             var viewStroke = stroke
             viewStroke.points = stroke.points
-            AnnotationDrawing.draw(stroke: viewStroke, in: bounds, sourceImage: baseImage)
+            try? AnnotationDrawing.draw(stroke: viewStroke, in: bounds, sourceImage: baseImage)
             return
         }
         var viewStroke = stroke
         viewStroke.start = mapImagePointToView(stroke.start)
         viewStroke.end = mapImagePointToView(stroke.end)
-        AnnotationDrawing.draw(stroke: viewStroke, in: bounds, sourceImage: nil)
+        do {
+            try AnnotationDrawing.draw(stroke: viewStroke, in: bounds, sourceImage: nil)
+        } catch {
+            NSColor.black.setFill()
+            let region = AnnotationDrawing.rect(from: viewStroke.start, to: viewStroke.end)
+            region.fill()
+            ("Preview — release to apply" as NSString).draw(in: region,
+                withAttributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 12)])
+        }
     }
 
     private func drawCropOverlay(from start: CGPoint, to end: CGPoint) {
@@ -353,9 +369,9 @@ final class AnnotationCanvasView: NSView {
         nextCounterValue = 1
     }
 
-    func currentImage() -> NSImage? {
-        rebuildComposite()
-        return renderedImage ?? baseImage
+    func currentImage() throws -> NSImage? {
+        if let renderingError { throw renderingError }
+        return renderedImage
     }
 
     private func appendStroke(_ stroke: AnnotationStroke) {
@@ -471,6 +487,7 @@ final class AnnotationCanvasView: NSView {
     }
 
     func rebuildComposite() {
+        renderingError = nil
         guard let baseImage else {
             renderedImage = nil
             return
@@ -489,16 +506,25 @@ final class AnnotationCanvasView: NSView {
             hints: nil
         )
         let canvas = NSRect(origin: .zero, size: size)
-        for region in redactionRegions {
-            AnnotationDrawing.pixelate(
-                from: CGPoint(x: region.minX, y: region.minY),
-                to: CGPoint(x: region.maxX, y: region.maxY),
-                in: canvas,
-                sourceImage: baseImage
-            )
-        }
-        for stroke in strokes {
-            AnnotationDrawing.draw(stroke: stroke, in: canvas, sourceImage: baseImage)
+        do {
+            for region in redactionRegions {
+                try AnnotationDrawing.pixelate(
+                    from: CGPoint(x: region.minX, y: region.minY),
+                    to: CGPoint(x: region.maxX, y: region.maxY),
+                    in: canvas, sourceImage: baseImage, renderer: redactionRenderer,
+                    sourceCGImage: sourceCGImage
+                )
+            }
+            for stroke in strokes {
+                try AnnotationDrawing.draw(stroke: stroke, in: canvas, sourceImage: baseImage,
+                                           renderer: redactionRenderer, sourceCGImage: sourceCGImage)
+            }
+        } catch {
+            renderingError = error
+            NSColor.black.setFill()
+            canvas.fill()
+            ("Redaction failed — export blocked" as NSString).draw(at: CGPoint(x: 12, y: 12),
+                withAttributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 18)])
         }
         image.unlockFocus()
         renderedImage = image

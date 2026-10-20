@@ -42,19 +42,20 @@ struct ExportBench {
                 let specification = try spec(strokes, height: source.size.height)
                 let canvas = AnnotationCanvasView(frame: NSRect(origin: .zero, size: source.size))
                 canvas.baseImage = source
-                guard let reference = canvas.currentImage() else { throw BenchError.image }
+                guard let reference = try canvas.currentImage() else { throw BenchError.image }
                 canvas.strokes = strokes
                 for path in ["editor", "core"] {
                     func render() throws -> NSImage {
-                        if path == "core" { return AnnotationRenderer.apply(spec: specification, to: source) }
-                        guard let image = canvas.currentImage() else { throw BenchError.image }
+                        if path == "core" { return try AnnotationRenderer.apply(spec: specification, to: source) }
+                        canvas.rebuildComposite()
+                        guard let image = try canvas.currentImage() else { throw BenchError.image }
                         return image
                     }
                     let annotated = try render()
                     try validate(annotated, reference: reference, strokes: strokes, path: path)
                     if arguments[2] == "export" {
                         for format in [ScreenshotFormat.png, .jpeg] {
-                            try ImageFormats.write(image: annotated, to: destination.appendingPathComponent("\(path)-\(name).\(format == .png ? "png" : "jpg")"), format: format, jpegQuality: 0.85)
+                            _ = try await ImageFormats.writeAsync(ImageFormats.snapshot(annotated), to: destination.appendingPathComponent("\(path)-\(name).\(format == .png ? "png" : "jpg")"), format: format, jpegQuality: 0.85)
                         }
                     } else {
                         var samples: [Double] = []
@@ -66,16 +67,19 @@ struct ExportBench {
                         measurements["\(path)-annotate-export-\(name)-warm"] = Summary(samples)
                         for format in [ScreenshotFormat.png, .jpeg] {
                             var saveSamples: [Double] = []
+                            var snapshotSamples: [Double] = []
                             let url = destination.appendingPathComponent("scratch-\(path)-\(name).\(format == .png ? "png" : "jpg")")
                             for _ in 0..<iterations {
                                 let start = CFAbsoluteTimeGetCurrent()
-                                try autoreleasepool { try ImageFormats.write(image: annotated, to: url, format: format, jpegQuality: 0.85) }
+                                let snapshot = try ImageFormats.snapshot(annotated)
+                                snapshotSamples.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                                _ = try await ImageFormats.writeAsync(snapshot, to: url, format: format, jpegQuality: 0.85)
                                 saveSamples.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
                             }
                             try FileManager.default.removeItem(at: url)
                             let key = "\(path)-save-\(format.rawValue)-\(name)"
                             measurements[key] = Summary(saveSamples)
-                            measurements[key + "-main-blocked"] = Summary(saveSamples)
+                            measurements[key + "-main-snapshot"] = Summary(snapshotSamples)
                         }
                     }
                 }

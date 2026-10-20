@@ -115,22 +115,24 @@ final class PinnedScreenshotWindowController: NSObject, NSWindowDelegate {
     }
 
     private func copyImage() {
-        ImageFormats.copyToPasteboard(image)
+        ImageExportActions.copy(image)
     }
 
     private func saveImage() {
         let url = AppSettings.shared.defaultSaveURL(prefix: "Pinned")
-        do {
-            let actualURL = try ImageFormats.writeUnique(
-                image: image,
-                to: url,
-                format: AppSettings.shared.format,
-                jpegQuality: AppSettings.shared.jpegQuality
-            )
-            RecentCapturesStore.record(url: actualURL)
-            NSWorkspace.shared.activateFileViewerSelecting([actualURL])
-        } catch {
-            NSAlert(error: error).runModal()
+        ImageExportActions.perform {
+            do {
+                let actualURL = try await ImageFormats.writeUniqueAsync(
+                    image: self.image,
+                    to: url,
+                    format: AppSettings.shared.format,
+                    jpegQuality: AppSettings.shared.jpegQuality
+                )
+                RecentCapturesStore.record(url: actualURL)
+                NSWorkspace.shared.activateFileViewerSelecting([actualURL])
+            } catch {
+                NSAlert(error: error).runModal()
+            }
         }
     }
 
