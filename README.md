@@ -54,7 +54,7 @@
 
 Claude Desktop（`claude_desktop_config.json`）同样使用 `command` + `args: ["mcp"]`。工具包括：`capture_screen`、`capture_window`、`list_windows`、`list_displays`、`ocr`、`auto_redact`、`ask_ai`、`to_latex`、`extract_table`、`annotate`、`record_start`、`record_stop`。
 
-URL 示例：`octoshot://capture?mode=fullscreen`（区域/窗口模式会打开应用内交互流程）；`octoshot://record?action=start&mode=fullscreen&format=video`；`octoshot record stop`（通过 URL 唤起应用）。
+URL 示例：`octoshot://capture?mode=fullscreen`（区域/窗口模式会打开应用内交互流程）；`octoshot://record?action=start&mode=fullscreen&format=video`；`octoshot record stop`（通过 URL 唤起应用）。任何应用或网页都能打开这些链接，因此直接截全屏或开始录屏的请求默认会先弹窗确认（设置 → 开发者 → URL 协议，可改为始终允许或关闭）；截图固定保存到存储文件夹，链接无法指定路径。
 
 ## 环境要求
 
@@ -170,7 +170,7 @@ Use **Settings → Developer → Install Command Line Tool** to install `octosho
 }
 ```
 
-MCP tools: `capture_screen`, `capture_window`, `list_windows`, `list_displays`, `ocr`, `auto_redact`, `ask_ai`, `to_latex`, `extract_table`, `annotate`, `record_start`, `record_stop`. URL examples: `octoshot://capture?mode=window`; `octoshot://record?action=start&format=gif`; CLI `octoshot record stop` (opens the app via URL).
+MCP tools: `capture_screen`, `capture_window`, `list_windows`, `list_displays`, `ocr`, `auto_redact`, `ask_ai`, `to_latex`, `extract_table`, `annotate`, `record_start`, `record_stop`. URL examples: `octoshot://capture?mode=window`; `octoshot://record?action=start&format=gif`; CLI `octoshot record stop` (opens the app via URL). Because any app or web page can open these links, requests that capture the full screen or start a recording on their own ask for confirmation by default (Settings → Developer → URL scheme: always allow or off); screenshots always go to the save folder, and links cannot choose the path.
 
 ### Embedded AI (SmolVLM2 + pix2tex)
 

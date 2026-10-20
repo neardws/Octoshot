@@ -71,7 +71,7 @@ public enum AgentCaptureEngine {
         switch options.mode {
         case .fullscreen, .display:
             let display = content.displays.first { $0.displayID == options.displayID }
-                ?? content.displays.first
+                ?? ScreenCaptureService.displayUnderMouse(in: content)
             guard let target = display else { throw CaptureError.noDisplays }
             displayMeta = target.displayID
             image = try await ScreenCaptureService.shared.captureFullscreen(display: target)

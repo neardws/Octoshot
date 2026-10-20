@@ -1,9 +1,12 @@
 import AppKit
 import SwiftUI
+import OctoshotCore
 
 struct AgentSettingsPane: View {
     @State private var installStatus = ""
     @State private var isInstalled = CommandLineToolInstaller.isInstalledCorrectly()
+    @State private var urlSchemePolicy = AppSettings.shared.urlSchemePolicy
+    @State private var trustedCallerCount = AppSettings.shared.urlSchemeTrustedCallers.count
 
     var body: some View {
         Group {
@@ -54,8 +57,34 @@ struct AgentSettingsPane: View {
             } header: {
                 Label("MCP configuration", systemImage: "curlybraces")
             }
+
+            Section {
+                Picker(OctoshotL10n.urlSchemePolicyLabel, selection: $urlSchemePolicy) {
+                    ForEach(URLSchemeAutomationPolicy.allCases) { policy in
+                        Text(OctoshotL10n.urlSchemePolicyName(policy)).tag(policy)
+                    }
+                }
+                .onChange(of: urlSchemePolicy) { _, policy in
+                    AppSettings.shared.urlSchemePolicy = policy
+                }
+                Text(OctoshotL10n.urlSchemeExplanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if trustedCallerCount > 0 {
+                    Button(OctoshotL10n.urlSchemeForgetTrusted(count: trustedCallerCount)) {
+                        AppSettings.shared.urlSchemeTrustedCallers = []
+                        trustedCallerCount = 0
+                    }
+                }
+            } header: {
+                Label(OctoshotL10n.urlSchemeSectionTitle, systemImage: "link")
+            }
         }
-        .onAppear { isInstalled = CommandLineToolInstaller.isInstalledCorrectly() }
+        .onAppear {
+            isInstalled = CommandLineToolInstaller.isInstalledCorrectly()
+            urlSchemePolicy = AppSettings.shared.urlSchemePolicy
+            trustedCallerCount = AppSettings.shared.urlSchemeTrustedCallers.count
+        }
     }
 
     private func installCLI() {

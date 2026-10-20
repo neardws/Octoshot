@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = Updater.shared
         EmbeddedAIRegistrar.install()
+        ScreenCaptureService.shared.capturableOwnWindowIDs = { PinnedScreenshotManager.visibleWindowIDs }
         NSApp.setActivationPolicy(.accessory)
         SettingsOpener.installAccessoryRestoreOnClose()
         setupStatusItem()
@@ -58,8 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        let caller = URLSchemeCaller.current()
         for url in urls {
-            AgentURLRouter.handle(url)
+            AgentURLRouter.handle(url, caller: caller)
         }
     }
 

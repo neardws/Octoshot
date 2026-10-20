@@ -29,6 +29,8 @@ public enum RedactionKind: String, Codable, CaseIterable, Identifiable {
 
 public struct RedactionCandidate: Identifiable, Equatable {
     public let id: UUID
+    /// Region to redact, in the image's points with a top-left origin (the annotation
+    /// editor's coordinate space).
     public var rect: CGRect
     public var kind: RedactionKind
     public var detail: String

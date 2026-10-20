@@ -17,6 +17,13 @@ final class PinnedScreenshotManager {
 
     private init() {}
 
+    /// Window IDs of visible pins, which stay in captures even though they float above other windows.
+    static var visibleWindowIDs: Set<CGWindowID> {
+        Set(NSApp.windows.compactMap { $0 as? PinnedScreenshotPanel }
+            .filter(\.isVisible)
+            .map { CGWindowID($0.windowNumber) })
+    }
+
     func pin(image: NSImage) {
         let controller = PinnedScreenshotWindowController(
             image: image,

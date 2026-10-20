@@ -117,6 +117,19 @@ enum AnnotationDrawing {
         path.stroke()
     }
 
+    /// Draws a filtered patch upright; `region` is top-left based, matching the flipped composite.
+    private static func drawPatch(_ patch: CGImage, in region: NSRect) {
+        NSImage(cgImage: patch, size: region.size).draw(
+            in: region,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1,
+            respectFlipped: true,
+            hints: nil
+        )
+    }
+
+    /// `start`/`end` are in the source image's points with a top-left origin.
     static func pixelate(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?) {
         guard let sourceImage,
               let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
@@ -127,7 +140,7 @@ enum AnnotationDrawing {
         let scaleY = CGFloat(cg.height) / canvas.height
         let crop = CGRect(
             x: region.origin.x * scaleX,
-            y: CGFloat(cg.height) - (region.origin.y + region.height) * scaleY,
+            y: region.origin.y * scaleY,
             width: region.width * scaleX,
             height: region.height * scaleY
         ).integral
@@ -140,8 +153,7 @@ enum AnnotationDrawing {
         guard let output = filter.outputImage else { return }
         let context = CIContext()
         guard let pix = context.createCGImage(output, from: output.extent) else { return }
-        let patch = NSImage(cgImage: pix, size: region.size)
-        patch.draw(in: region)
+        drawPatch(pix, in: region)
     }
 
     static func blur(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?) {
@@ -154,7 +166,7 @@ enum AnnotationDrawing {
         let scaleY = CGFloat(cg.height) / canvas.height
         let crop = CGRect(
             x: region.origin.x * scaleX,
-            y: CGFloat(cg.height) - (region.origin.y + region.height) * scaleY,
+            y: region.origin.y * scaleY,
             width: region.width * scaleX,
             height: region.height * scaleY
         ).integral
@@ -168,7 +180,6 @@ enum AnnotationDrawing {
         let context = CIContext()
         let extent = output.extent
         guard let blurred = context.createCGImage(output, from: extent) else { return }
-        let patch = NSImage(cgImage: blurred, size: region.size)
-        patch.draw(in: region)
+        drawPatch(blurred, in: region)
     }
 }
