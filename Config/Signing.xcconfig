@@ -2,3 +2,4 @@
 // Override by editing this file or replacing with your own xcconfig (see .sample).
 DEVELOPMENT_TEAM = YNQ2233752
 #include "EmbeddedAI.xcconfig"
+#include "Version.xcconfig"

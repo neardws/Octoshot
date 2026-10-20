@@ -1,3 +1,4 @@
 // Copy to Config/Signing.xcconfig for local overrides (optional).
 // XcodeGen merges this file when present; the sample is committed for reference.
 DEVELOPMENT_TEAM = YNQ2233752
+#include "Version.xcconfig"
