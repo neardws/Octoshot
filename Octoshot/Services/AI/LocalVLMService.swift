@@ -14,12 +14,17 @@ final class LocalVLMService: EmbeddedVisionBackend, @unchecked Sendable {
     }
 
     func complete(prompt: String, image: NSImage) async throws -> String {
+        try await complete(prompt: prompt, image: image, maxTokens: 256)
+    }
+
+    func complete(prompt: String, image: NSImage, maxTokens: Int, timeout: TimeInterval? = 120) async throws -> String {
         guard isReady() else { throw EmbeddedAIError.modelNotInstalled(.smolVLM2_500M_4bit) }
         do {
             return try await MLXVLMLoader.shared.respond(
                 prompt: prompt,
                 image: image,
-                modelDirectory: EmbeddedAIModelPaths.directory(for: .smolVLM2_500M_4bit)
+                modelDirectory: EmbeddedAIModelPaths.directory(for: .smolVLM2_500M_4bit),
+                maxTokens: maxTokens, timeout: timeout
             )
         } catch let error as MLXVLMLoaderError {
             switch error {
@@ -33,7 +38,7 @@ final class LocalVLMService: EmbeddedVisionBackend, @unchecked Sendable {
 
     func stream(prompt: String, image: NSImage) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     let text = try await complete(prompt: prompt, image: image)
                     continuation.yield(text)
@@ -42,6 +47,7 @@ final class LocalVLMService: EmbeddedVisionBackend, @unchecked Sendable {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

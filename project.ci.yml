@@ -62,6 +62,7 @@ targets:
       - path: OctoshotCoreTests
     dependencies:
       - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
     settings:
       GENERATE_INFOPLIST_FILE: YES
 
