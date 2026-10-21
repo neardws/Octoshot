@@ -4,15 +4,13 @@ import CoreImage
 public enum AnnotationRenderer {
     public static func apply(spec: AgentAnnotationSpec, to image: NSImage, renderer: RedactionRenderer = .shared) throws -> NSImage {
         let size = image.size
-        let output = NSImage(size: size)
-        output.lockFocus()
-        defer { output.unlockFocus() }
-        image.draw(in: NSRect(origin: .zero, size: size))
-        let canvas = NSRect(origin: .zero, size: size)
-        for item in spec.annotations {
-            try draw(item: item, in: canvas, sourceImage: image, renderer: renderer)
+        return try ImageFormats.composite(size: size, flipped: false) {
+            image.draw(in: NSRect(origin: .zero, size: size))
+            let canvas = NSRect(origin: .zero, size: size)
+            for item in spec.annotations {
+                try draw(item: item, in: canvas, sourceImage: image, renderer: renderer)
+            }
         }
-        return output
     }
 
     private static func draw(item: AgentAnnotationSpec.Item, in canvas: NSRect, sourceImage: NSImage, renderer: RedactionRenderer) throws {

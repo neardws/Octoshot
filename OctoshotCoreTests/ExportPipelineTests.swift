@@ -102,6 +102,9 @@ final class ExportPipelineTests: XCTestCase {
             let uncached = try renderer.patch(source: source, region: region, canvasSize: CGSize(width: 80, height: 48),
                                               kind: kind, topLeftOrigin: true, useCache: false)
             XCTAssertEqual(try rgba(cached), try rgba(uncached))
+            XCTAssertEqual(cached.bitsPerComponent, 8)
+            XCTAssertEqual(uncached.bitsPerComponent, 8)
+            XCTAssertEqual(cached.colorSpace?.copyICCData(), source.colorSpace?.copyICCData())
         }
     }
 
@@ -133,6 +136,7 @@ final class ExportPipelineTests: XCTestCase {
                 let encoded = try XCTUnwrap(ImageFormats.data(for: image, format: format, jpegQuality: 0.85))
                 let decoder = try XCTUnwrap(CGImageSourceCreateWithData(encoded as CFData, nil))
                 let decoded = try XCTUnwrap(CGImageSourceCreateImageAtIndex(decoder, 0, nil))
+                XCTAssertEqual(decoded.bitsPerComponent, 8)
                 XCTAssertEqual(decoded.width, legacy.pixelsWide)
                 XCTAssertEqual(decoded.height, legacy.pixelsHigh)
                 XCTAssertEqual(decoded.colorSpace?.model, source.colorSpace?.model)

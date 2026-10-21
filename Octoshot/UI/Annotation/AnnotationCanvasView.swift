@@ -493,40 +493,38 @@ final class AnnotationCanvasView: NSView {
             return
         }
         let size = baseImage.size
-        let image = NSImage(size: size)
-        // Strokes and redactions are stored with a top-left origin (the flipped view's space),
-        // so composite in a flipped context too; otherwise they land vertically mirrored.
-        image.lockFocusFlipped(true)
-        baseImage.draw(
-            in: NSRect(origin: .zero, size: size),
-            from: .zero,
-            operation: .copy,
-            fraction: 1,
-            respectFlipped: true,
-            hints: nil
-        )
-        let canvas = NSRect(origin: .zero, size: size)
         do {
-            for region in redactionRegions {
-                try AnnotationDrawing.pixelate(
-                    from: CGPoint(x: region.minX, y: region.minY),
-                    to: CGPoint(x: region.maxX, y: region.maxY),
-                    in: canvas, sourceImage: baseImage, renderer: redactionRenderer,
-                    sourceCGImage: sourceCGImage
+            renderedImage = try ImageFormats.composite(size: size, flipped: true) {
+                baseImage.draw(
+                    in: NSRect(origin: .zero, size: size),
+                    from: .zero,
+                    operation: .copy,
+                    fraction: 1,
+                    respectFlipped: true,
+                    hints: nil
                 )
-            }
-            for stroke in strokes {
-                try AnnotationDrawing.draw(stroke: stroke, in: canvas, sourceImage: baseImage,
-                                           renderer: redactionRenderer, sourceCGImage: sourceCGImage)
+                let canvas = NSRect(origin: .zero, size: size)
+                for region in redactionRegions {
+                    try AnnotationDrawing.pixelate(
+                        from: CGPoint(x: region.minX, y: region.minY),
+                        to: CGPoint(x: region.maxX, y: region.maxY),
+                        in: canvas, sourceImage: baseImage, renderer: redactionRenderer,
+                        sourceCGImage: sourceCGImage
+                    )
+                }
+                for stroke in strokes {
+                    try AnnotationDrawing.draw(stroke: stroke, in: canvas, sourceImage: baseImage,
+                                               renderer: redactionRenderer, sourceCGImage: sourceCGImage)
+                }
             }
         } catch {
             renderingError = error
-            NSColor.black.setFill()
-            canvas.fill()
-            ("Redaction failed — export blocked" as NSString).draw(at: CGPoint(x: 12, y: 12),
-                withAttributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 18)])
+            renderedImage = try? ImageFormats.composite(size: size, flipped: true) {
+                NSColor.black.setFill()
+                NSRect(origin: .zero, size: size).fill()
+                ("Redaction failed — export blocked" as NSString).draw(at: CGPoint(x: 12, y: 12),
+                    withAttributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 18)])
+            }
         }
-        image.unlockFocus()
-        renderedImage = image
     }
 }

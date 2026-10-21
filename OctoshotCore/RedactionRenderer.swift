@@ -86,7 +86,10 @@ public final class RedactionRenderer: @unchecked Sendable {
         if let render {
             result = render(output, input.extent)
         } else {
-            result = context.createCGImage(output, from: input.extent)
+            let outputSpace = source.colorSpace?.model == .rgb
+                ? source.colorSpace : CGColorSpace(name: CGColorSpace.sRGB)
+            result = context.createCGImage(output, from: input.extent, format: .RGBA8,
+                                           colorSpace: outputSpace, deferred: false)
         }
         guard let result else { throw RedactionError.filterFailed }
         if useCache {

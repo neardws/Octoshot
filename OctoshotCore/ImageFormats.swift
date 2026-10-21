@@ -3,6 +3,10 @@ import ImageIO
 import UniformTypeIdentifiers
 
 public enum ImageFormats {
+    private final class RasterImage: NSImage {
+        var pixels: CGImage?
+    }
+
     public struct Snapshot: @unchecked Sendable {
         public let image: CGImage
         public let pointSize: CGSize
@@ -17,10 +21,69 @@ public enum ImageFormats {
                                                      autoreleaseFrequency: .workItem)
 
     public static func snapshot(_ image: NSImage) throws -> Snapshot {
+        if !Thread.isMainThread {
+            return try DispatchQueue.main.sync { try snapshot(image) }
+        }
         guard let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw CaptureError.captureFailed("Failed to extract image pixels")
         }
-        return Snapshot(image: pixels, pointSize: image.size)
+        if let raster = image as? RasterImage, raster.pixels === pixels {
+            return Snapshot(image: pixels, pointSize: image.size)
+        }
+        let context = try bitmapContext(width: pixels.width, height: pixels.height,
+                                        colorSpace: pixels.colorSpace ?? CGColorSpaceCreateDeviceRGB())
+        context.draw(pixels, in: CGRect(x: 0, y: 0, width: pixels.width, height: pixels.height))
+        guard let materialized = context.makeImage() else {
+            throw CaptureError.captureFailed("Failed to materialize image pixels")
+        }
+        return Snapshot(image: materialized, pointSize: image.size)
+    }
+
+    public static func composite(size: CGSize, flipped: Bool, drawing: () throws -> Void) throws -> NSImage {
+        if !Thread.isMainThread {
+            return try DispatchQueue.main.sync { try composite(size: size, flipped: flipped, drawing: drawing) }
+        }
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else {
+            throw CaptureError.captureFailed("Invalid composite size")
+        }
+        let probe = NSImage(size: CGSize(width: 1, height: 1))
+        probe.lockFocus()
+        let focus = NSGraphicsContext.current?.cgContext
+        let scaleX = abs(focus?.ctm.a ?? 1)
+        let scaleY = abs(focus?.ctm.d ?? 1)
+        let colorSpace = focus?.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        probe.unlockFocus()
+        let width = ceil(size.width * scaleX)
+        let height = ceil(size.height * scaleY)
+        guard width > 0, height > 0, width < CGFloat(Int.max / 4), height < CGFloat(Int.max) else {
+            throw CaptureError.captureFailed("Invalid composite pixel size")
+        }
+        let context = try bitmapContext(width: Int(width), height: Int(height), colorSpace: colorSpace)
+        context.scaleBy(x: scaleX, y: scaleY)
+        if flipped {
+            context.translateBy(x: 0, y: size.height)
+            context.scaleBy(x: 1, y: -1)
+        }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: flipped)
+        try drawing()
+        guard let pixels = context.makeImage() else {
+            throw CaptureError.captureFailed("Failed to materialize composite")
+        }
+        let image = RasterImage(cgImage: pixels, size: size)
+        image.pixels = pixels
+        return image
+    }
+
+    private static func bitmapContext(width: Int, height: Int, colorSpace: CGColorSpace) throws -> CGContext {
+        let rgbSpace = colorSpace.model == .rgb ? colorSpace : CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: rgbSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            throw CaptureError.captureFailed("Failed to allocate 8-bit image pixels")
+        }
+        return context
     }
 
     public static func encode(_ snapshot: Snapshot, format: ScreenshotFormat, jpegQuality: Double) throws -> Data {
