@@ -28,3 +28,11 @@ jobs:
             build
         env:
           NSUnbufferedIO: "YES"
+      - name: Verify embedded helpers
+        run: |
+          set -euo pipefail
+          HELPERS="$PWD/.derivedData-mlx/Build/Products/Debug/Octoshot.app/Contents/Helpers"
+          "$HELPERS/octoshot" --help
+          "$HELPERS/llama-mtmd-cli" --help >/dev/null
+          test -L "$HELPERS/libggml.dylib"
+          test ! -e "$HELPERS/libllama-server-impl.dylib"

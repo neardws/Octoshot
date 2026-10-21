@@ -24,6 +24,8 @@ settings:
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG"
+    Release:
+      ARCHS: arm64
   base:
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
@@ -135,11 +137,7 @@ targets:
             echo "warning: llama-mtmd-cli not found at ${SRC_DIR}/llama-mtmd-cli (run Scripts/fetch-llama-mtmd.sh)"
             exit 0
           fi
-          cp -f "${SRC_DIR}/llama-mtmd-cli" "${HELPERS_DIR}/llama-mtmd-cli"
-          chmod +x "${HELPERS_DIR}/llama-mtmd-cli"
-          for lib in "${SRC_DIR}"/*.dylib; do
-            [ -f "$lib" ] && cp -f "$lib" "${HELPERS_DIR}/"
-          done
+          /bin/bash "${PROJECT_DIR}/Scripts/install-llama-mtmd.sh" "$SRC_DIR" "$HELPERS_DIR"
         basedOnDependencyAnalysis: false
     settings:
       PRODUCT_NAME: Octoshot

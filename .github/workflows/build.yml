@@ -21,6 +21,11 @@ jobs:
       - name: Fetch llama-mtmd-cli
         run: bash Scripts/fetch-llama-mtmd.sh build/llama-mtmd
 
+      - name: Test slim runtime packaging
+        run: |
+          bash Scripts/tests/test-slim-bundle.sh
+          python3 -B -m unittest discover -s Scripts/tests -p 'test_*.py'
+
       - name: Build Octoshot
         run: |
           set -o pipefail
@@ -46,7 +51,8 @@ jobs:
           "$CLI" --help
           echo "Verified: $CLI --help"
           MTMD="$APP_PATH/Contents/Helpers/llama-mtmd-cli"
-          if [ -x "$MTMD" ]; then
-            "$MTMD" --help >/dev/null 2>&1 || true
-            echo "Verified: bundled llama-mtmd-cli"
-          fi
+          test -x "$MTMD"
+          "$MTMD" --help >/dev/null
+          test -L "$APP_PATH/Contents/Helpers/libggml.dylib"
+          test ! -e "$APP_PATH/Contents/Helpers/libllama-server-impl.dylib"
+          echo "Verified: bundled llama-mtmd-cli"

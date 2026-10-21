@@ -56,6 +56,12 @@ bash Scripts/generate-appcast.sh
 
 Commit `website/public/appcast.xml`, merge to `main`, and ensure the release DMG is uploaded to GitHub Releases at the URL used in the appcast enclosure (for example `https://github.com/neardws/Octoshot/releases/download/v0.2.1/Octoshot-v0.2.1-macOS.dmg`).
 
+## Apple Silicon-only releases
+
+Release builds now set `ARCHS=arm64` for the app, CLI, and embedded MLX framework. The app hard-links MLX, so retaining an Intel app slice without redesigning that boundary is not supported. Intel Macs cannot launch these releases; keep their last compatible universal release available. `LSArchitecturePriority` and `LSMinimumSystemVersion` are unchanged.
+
+Sparkle 2.10's `generate_appcast` detects an arm64-only executable and emits `<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>`. Its Intel update filter honors that requirement (including distinguishing Rosetta on Apple Silicon). `Scripts/generate-appcast.sh` now checks this requirement before copying the generated feed into the website; do not hand-publish an unguarded enclosure. Older Sparkle clients may not honor this field: verify the updater version in every supported Intel release before publishing, or keep those clients on a separate legacy feed. An Info.plist change in the new app cannot protect already-installed clients.
+
 ## Placeholder appcast
 
 Until the first signed release, the feed is an empty RSS channel (no `<item>` entries). Sparkle treats that as “no updates available” and does not break clients.
