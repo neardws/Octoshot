@@ -89,6 +89,71 @@ final class SubprocessRunnerTests: XCTestCase {
         await bounded { try await self.stoppedProcess(ignoreTermination: false, timeout: 0.5) }
     }
 
+    private func stoppedProcessWithInheritedPipe(timeout: TimeInterval?) async throws {
+        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let task = Task {
+            try await SubprocessRunner.run(
+                executable: shell,
+                arguments: ["-c", """
+                    trap '' TERM
+                    /bin/sleep 30 &
+                    child=$!
+                    trap - TERM
+                    echo $$ $child > "$1"
+                    echo started
+                    wait
+                    """, "test", pidFile.path],
+                timeout: timeout)
+        }
+        defer {
+            task.cancel()
+            if let text = try? String(contentsOf: pidFile, encoding: .utf8) {
+                for value in text.split(whereSeparator: { $0.isWhitespace }) {
+                    if let pid = Int32(value), pid > 0 { kill(pid, SIGKILL) }
+                }
+            }
+            try? FileManager.default.removeItem(at: pidFile)
+        }
+        var processIDs: [Int32] = []
+        let readyDeadline = Date().addingTimeInterval(2)
+        while processIDs.count != 2, Date() < readyDeadline {
+            if let text = try? String(contentsOf: pidFile, encoding: .utf8) {
+                processIDs = text.split(whereSeparator: { $0.isWhitespace }).compactMap { Int32($0) }
+            }
+            if processIDs.count != 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        XCTAssertEqual(processIDs.count, 2)
+        let childPID = try XCTUnwrap(processIDs.count == 2 ? processIDs.last : nil)
+        XCTAssertGreaterThan(childPID, 0)
+        let completed = expectation(description: "Stops without waiting for inherited pipe EOF")
+        let observer = Task {
+            defer { completed.fulfill() }
+            do {
+                _ = try await task.value
+                XCTFail("Expected cancellation or timeout")
+            } catch {
+                if timeout == nil {
+                    XCTAssertTrue(error is CancellationError, "\(error)")
+                } else {
+                    XCTAssertEqual(error as? SubprocessRunner.Failure, .timedOut)
+                }
+            }
+        }
+        if timeout == nil { task.cancel() }
+        await fulfillment(of: [completed], timeout: 3)
+        XCTAssertEqual(kill(childPID, 0), 0)
+        kill(childPID, SIGKILL)
+        await observer.value
+    }
+
+    func testCancellationDoesNotWaitForInheritedPipeEOF() async {
+        await bounded { try await self.stoppedProcessWithInheritedPipe(timeout: nil) }
+    }
+
+    func testTimeoutDoesNotWaitForInheritedPipeEOF() async {
+        await bounded { try await self.stoppedProcessWithInheritedPipe(timeout: 0.5) }
+    }
+
     func testAlreadyCancelledTaskDoesNotLaunch() async {
         await bounded {
             let marker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

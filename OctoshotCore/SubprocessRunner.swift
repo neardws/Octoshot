@@ -99,6 +99,7 @@ private final class RunState: @unchecked Sendable {
         defer { lock.unlock() }
         guard !finished, stopError == nil else { return }
         stopError = error
+        completeIfReady()
         guard started, !exited, process.isRunning else { return }
         process.terminate()
         let work = DispatchWorkItem { [weak self] in
@@ -139,10 +140,10 @@ private final class RunState: @unchecked Sendable {
     }
 
     private func completeIfReady() {
-        guard exited, reachedEOF else { return }
+        guard exited else { return }
         if let stopError {
             finish(.failure(stopError))
-        } else {
+        } else if reachedEOF {
             finish(.success(SubprocessRunner.Output(
                 terminationStatus: process.terminationStatus,
                 text: String(decoding: output, as: UTF8.self))))
