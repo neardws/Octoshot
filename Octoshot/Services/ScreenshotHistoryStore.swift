@@ -47,9 +47,10 @@ enum ScreenshotHistoryStore {
         NSImage(contentsOf: url)
     }
 
+    @MainActor
     static func copyToClipboard(url: URL) {
         if let image = NSImage(contentsOf: url) {
-            ImageFormats.copyToPasteboard(image)
+            ImageExportActions.copy(image)
         }
     }
 

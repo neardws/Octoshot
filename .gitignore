@@ -4,6 +4,7 @@ Config/Signing.local.xcconfig
 # Xcode
 *.xcodeproj
 DerivedData/
+DerivedData-bench/
 .DS_Store
 
 # Packaging output

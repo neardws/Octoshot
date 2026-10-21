@@ -1,0 +1,98 @@
+name: OctoshotExportBench
+options:
+  deploymentTarget:
+    macOS: "14.0"
+configs:
+  Debug: debug
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    GENERATE_INFOPLIST_FILE: YES
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  OctoshotCore:
+    type: framework
+    platform: macOS
+    sources: [OctoshotCore]
+    settings:
+      MACH_O_TYPE: staticlib
+      DEFINES_MODULE: YES
+      PRODUCT_BUNDLE_IDENTIFIER: com.neardws.OctoshotCore
+  octoshot-export-bench:
+    type: tool
+    platform: macOS
+    sources:
+      - path: ExportBench
+      - path: Octoshot/UI/Annotation/AnnotationModels.swift
+      - path: Octoshot/UI/Annotation/AnnotationDrawing.swift
+      - path: Octoshot/UI/Annotation/AnnotationCanvasView.swift
+    dependencies:
+      - target: OctoshotCore
+  OctoshotEmbeddedMLX:
+    type: framework
+    platform: macOS
+    sources: [OctoshotEmbeddedMLX]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.neardws.OctoshotEmbeddedMLX
+  octoshot-cli:
+    type: tool
+    platform: macOS
+    sources: [octoshot-cli]
+    dependencies:
+      - target: OctoshotCore
+    settings:
+      PRODUCT_NAME: octoshot
+      INFOPLIST_FILE: octoshot-cli/Info.plist
+      CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+  OctoshotCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: OctoshotCoreTests
+      - path: Octoshot/UI/Annotation/AnnotationModels.swift
+      - path: Octoshot/UI/Annotation/AnnotationDrawing.swift
+      - path: Octoshot/UI/Annotation/AnnotationCanvasView.swift
+    dependencies:
+      - target: OctoshotCore
+      - target: OctoshotEmbeddedMLX
+schemes:
+  octoshot-cli:
+    build:
+      targets:
+        octoshot-cli: all
+    run:
+      config: Debug
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
+  OctoshotCoreTests:
+    build:
+      targets:
+        OctoshotCoreTests: all
+    test:
+      config: Debug
+      targets: [OctoshotCoreTests]
+    run:
+      config: Debug
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
+  octoshot-export-bench:
+    build:
+      targets:
+        octoshot-export-bench: all
+    run:
+      config: Debug
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug

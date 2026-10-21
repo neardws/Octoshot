@@ -197,18 +197,28 @@ final class CaptureCoordinator {
     }
 
     private func presentResult(_ image: NSImage, savedFileURL: URL? = nil, captureAnchor: CGPoint? = nil) {
+        ImageExportActions.perform {
+            await self.presentResultAsync(image, savedFileURL: savedFileURL, captureAnchor: captureAnchor)
+        }
+    }
+
+    private func presentResultAsync(_ image: NSImage, savedFileURL: URL?, captureAnchor: CGPoint?) async {
         CaptureFeedback.playCaptureSoundIfEnabled()
         let settings = AppSettings.shared
         var savedURL: URL? = savedFileURL
 
         if settings.afterCaptureCopyToClipboard, savedFileURL == nil {
-            ImageFormats.copyToPasteboard(image)
+            do {
+                try await ImageFormats.copyToPasteboardAsync(image)
+            } catch {
+                finishWithError(error)
+            }
         }
 
         if settings.afterCaptureSaveToDisk, savedFileURL == nil {
             let url = settings.defaultSaveURL()
             do {
-                let actualURL = try ImageFormats.writeUnique(
+                let actualURL = try await ImageFormats.writeUniqueAsync(
                     image: image,
                     to: url,
                     format: settings.format,
@@ -232,26 +242,28 @@ final class CaptureCoordinator {
                 if let file = savedFileURL {
                     NSWorkspace.shared.activateFileViewerSelecting([file])
                 } else {
-                    ImageFormats.copyToPasteboard(image)
+                    ImageExportActions.copy(image)
                 }
             },
             onSave: {
-                if let file = savedFileURL {
-                    NSWorkspace.shared.activateFileViewerSelecting([file])
-                    return
-                }
-                let url = AppSettings.shared.defaultSaveURL()
-                do {
-                    let actualURL = try ImageFormats.writeUnique(
-                        image: image,
-                        to: url,
-                        format: AppSettings.shared.format,
-                        jpegQuality: AppSettings.shared.jpegQuality
-                    )
-                    captureURL = actualURL
-                    RecentCapturesStore.record(url: actualURL)
-                } catch {
-                    self.finishWithError(error)
+                ImageExportActions.perform {
+                    if let file = savedFileURL {
+                        NSWorkspace.shared.activateFileViewerSelecting([file])
+                        return
+                    }
+                    let url = AppSettings.shared.defaultSaveURL()
+                    do {
+                        let actualURL = try await ImageFormats.writeUniqueAsync(
+                            image: image,
+                            to: url,
+                            format: AppSettings.shared.format,
+                            jpegQuality: AppSettings.shared.jpegQuality
+                        )
+                        captureURL = actualURL
+                        RecentCapturesStore.record(url: actualURL)
+                    } catch {
+                        self.finishWithError(error)
+                    }
                 }
             },
             onAnnotate: { self.annotation.open(with: image) },
@@ -259,22 +271,26 @@ final class CaptureCoordinator {
             onOCR: { FeatureCoordinator.shared.showOCR(with: image) },
             onAskAI: { self.showAI(for: image) },
             onCopyMarkdown: developer ? {
-                do {
-                    captureURL = try DeveloperClipboard.copyMarkdownSnippet(for: image, existingURL: captureURL)
-                } catch {
-                    self.finishWithError(error)
+                ImageExportActions.perform {
+                    do {
+                        captureURL = try await DeveloperClipboard.copyMarkdownSnippet(for: image, existingURL: captureURL)
+                    } catch {
+                        self.finishWithError(error)
+                    }
                 }
             } : nil,
             onCopyPath: developer ? {
-                do {
-                    if let file = savedFileURL {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(file.path, forType: .string)
-                    } else {
-                        captureURL = try DeveloperClipboard.copyFilePath(for: image, existingURL: captureURL)
+                ImageExportActions.perform {
+                    do {
+                        if let file = savedFileURL {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(file.path, forType: .string)
+                        } else {
+                            captureURL = try await DeveloperClipboard.copyFilePath(for: image, existingURL: captureURL)
+                        }
+                    } catch {
+                        self.finishWithError(error)
                     }
-                } catch {
-                    self.finishWithError(error)
                 }
             } : nil,
             onClose: {}

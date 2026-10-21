@@ -1,8 +1,9 @@
 import AppKit
 import CoreImage
+import OctoshotCore
 
 enum AnnotationDrawing {
-    static func draw(stroke: AnnotationStroke, in canvas: NSRect, sourceImage: NSImage?) {
+    static func draw(stroke: AnnotationStroke, in canvas: NSRect, sourceImage: NSImage?, renderer: RedactionRenderer = .shared, sourceCGImage: CGImage? = nil) throws {
         switch stroke.tool {
         case .arrow:
             stroke.color.setStroke()
@@ -81,9 +82,9 @@ enum AnnotationDrawing {
             let origin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
             label.draw(at: origin, withAttributes: [.font: font, .foregroundColor: NSColor.white])
         case .pixelate:
-            pixelate(from: stroke.start, to: stroke.end, in: canvas, sourceImage: sourceImage)
+            try pixelate(from: stroke.start, to: stroke.end, in: canvas, sourceImage: sourceImage, renderer: renderer, sourceCGImage: sourceCGImage)
         case .blur:
-            blur(from: stroke.start, to: stroke.end, in: canvas, sourceImage: sourceImage)
+            try blur(from: stroke.start, to: stroke.end, in: canvas, sourceImage: sourceImage, renderer: renderer, sourceCGImage: sourceCGImage)
         case .crop, .measure:
             break
         }
@@ -130,56 +131,26 @@ enum AnnotationDrawing {
     }
 
     /// `start`/`end` are in the source image's points with a top-left origin.
-    static func pixelate(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?) {
-        guard let sourceImage,
-              let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        let region = rect(from: start, to: end)
-        guard region.width > 2, region.height > 2 else { return }
-
-        let scaleX = CGFloat(cg.width) / canvas.width
-        let scaleY = CGFloat(cg.height) / canvas.height
-        let crop = CGRect(
-            x: region.origin.x * scaleX,
-            y: region.origin.y * scaleY,
-            width: region.width * scaleX,
-            height: region.height * scaleY
-        ).integral
-        guard let cropped = cg.cropping(to: crop) else { return }
-
-        let ci = CIImage(cgImage: cropped)
-        guard let filter = CIFilter(name: "CIPixellate") else { return }
-        filter.setValue(ci, forKey: kCIInputImageKey)
-        filter.setValue(12, forKey: kCIInputScaleKey)
-        guard let output = filter.outputImage else { return }
-        let context = CIContext()
-        guard let pix = context.createCGImage(output, from: output.extent) else { return }
-        drawPatch(pix, in: region)
+    static func pixelate(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?, renderer: RedactionRenderer = .shared, sourceCGImage: CGImage? = nil) throws {
+        try redact(from: start, to: end, in: canvas, sourceImage: sourceImage,
+                   renderer: renderer, sourceCGImage: sourceCGImage, kind: .pixelate)
     }
 
-    static func blur(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?) {
-        guard let sourceImage,
-              let cg = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+    static func blur(from start: CGPoint, to end: CGPoint, in canvas: NSRect, sourceImage: NSImage?,
+                     renderer: RedactionRenderer = .shared, sourceCGImage: CGImage? = nil) throws {
+        try redact(from: start, to: end, in: canvas, sourceImage: sourceImage,
+                   renderer: renderer, sourceCGImage: sourceCGImage, kind: .blur)
+    }
+
+    private static func redact(from start: CGPoint, to end: CGPoint, in canvas: NSRect,
+                               sourceImage: NSImage?, renderer: RedactionRenderer,
+                               sourceCGImage: CGImage?, kind: RedactionRenderer.Kind) throws {
+        guard let source = sourceCGImage ?? sourceImage?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw RedactionError.unavailableSource
+        }
         let region = rect(from: start, to: end)
-        guard region.width > 2, region.height > 2 else { return }
-
-        let scaleX = CGFloat(cg.width) / canvas.width
-        let scaleY = CGFloat(cg.height) / canvas.height
-        let crop = CGRect(
-            x: region.origin.x * scaleX,
-            y: region.origin.y * scaleY,
-            width: region.width * scaleX,
-            height: region.height * scaleY
-        ).integral
-        guard let cropped = cg.cropping(to: crop) else { return }
-
-        let ci = CIImage(cgImage: cropped)
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return }
-        filter.setValue(ci, forKey: kCIInputImageKey)
-        filter.setValue(14, forKey: kCIInputRadiusKey)
-        guard let output = filter.outputImage else { return }
-        let context = CIContext()
-        let extent = output.extent
-        guard let blurred = context.createCGImage(output, from: extent) else { return }
-        drawPatch(blurred, in: region)
+        let patch = try renderer.patch(source: source, region: region, canvasSize: canvas.size,
+                                       kind: kind, topLeftOrigin: true)
+        drawPatch(patch, in: region)
     }
 }

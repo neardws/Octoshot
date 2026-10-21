@@ -211,7 +211,7 @@ struct OctoshotCLI {
         let specData = try Data(contentsOf: URL(fileURLWithPath: specPath))
         let spec = try JSONDecoder().decode(AgentAnnotationSpec.self, from: specData)
         let image = try AgentCaptureEngine.loadImage(path: path)
-        let annotated = AnnotationRenderer.apply(spec: spec, to: image)
+        let annotated = try AnnotationRenderer.apply(spec: spec, to: image)
         let out = value(for: "--output", in: args)
             ?? AgentConfiguration.saveDirectory.appendingPathComponent("annotated-\(UUID().uuidString).png").path
         try ImageFormats.writePNG(image: annotated, to: URL(fileURLWithPath: out))

@@ -729,7 +729,7 @@ private struct QuickAccessCard: View {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         case .redactedImage(let image):
-            ImageFormats.copyToPasteboard(image)
+            ImageExportActions.copy(image)
         }
         onAlternateAction()
         speculativeState.phase = .hidden
@@ -946,13 +946,52 @@ private struct DraggableThumbnailView: NSViewRepresentable {
 }
 
 final class DraggableImageView: NSImageView {
-    var dragImage: NSImage?
+    var dragImage: NSImage? {
+        didSet {
+            guard dragImage !== oldValue else { return }
+            prepareDragData()
+        }
+    }
     var onDragEnded: ((UInt) -> Void)?
     var onClick: (() -> Void)?
 
     private var mouseDownLocation: NSPoint?
     private var didBeginDrag = false
     private let dragThreshold: CGFloat = 5
+    private var dragData: Data?
+    private var dragError: Error?
+    private var preparationID = UUID()
+    private var pendingDragEvent: NSEvent?
+
+    private func prepareDragData() {
+        let identifier = UUID()
+        preparationID = identifier
+        dragData = nil
+        dragError = nil
+        pendingDragEvent = nil
+        guard let image = dragImage else { return }
+        do {
+            let snapshot = try ImageFormats.snapshot(image)
+            Task { @MainActor [weak self] in
+                do {
+                    let data = try await ImageFormats.encodeAsync(snapshot, format: .png, jpegQuality: 1)
+                    guard let self, self.preparationID == identifier else { return }
+                    self.dragData = data
+                    self.startPreparedDrag()
+                } catch {
+                    guard let self, self.preparationID == identifier else { return }
+                    self.dragError = error
+                    if self.pendingDragEvent != nil {
+                        self.pendingDragEvent = nil
+                        self.mouseDownLocation = nil
+                        NSAlert(error: error).runModal()
+                    }
+                }
+            }
+        } catch {
+            dragError = error
+        }
+    }
 
     override var isFlipped: Bool { true }
 
@@ -963,29 +1002,44 @@ final class DraggableImageView: NSImageView {
     override func draw(_ dirtyRect: NSRect) {}
 
     override func mouseDown(with event: NSEvent) {
+        pendingDragEvent = nil
         mouseDownLocation = convert(event.locationInWindow, from: nil)
         didBeginDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard !didBeginDrag, let image = dragImage, let start = mouseDownLocation else { return }
+        guard !didBeginDrag, dragImage != nil, let start = mouseDownLocation else { return }
         let current = convert(event.locationInWindow, from: nil)
         let distance = hypot(current.x - start.x, current.y - start.y)
         guard distance >= dragThreshold else { return }
+        if let dragError {
+            mouseDownLocation = nil
+            NSAlert(error: dragError).runModal()
+            return
+        }
+        pendingDragEvent = event
+        startPreparedDrag()
+    }
+
+    private func startPreparedDrag() {
+        guard !didBeginDrag, let event = pendingDragEvent, let image = dragImage,
+              let data = dragData, mouseDownLocation != nil,
+              NSEvent.pressedMouseButtons & 1 != 0 else { return }
+        pendingDragEvent = nil
         didBeginDrag = true
         mouseDownLocation = nil
 
         let item = NSPasteboardItem()
-        if let data = ImageFormats.pngData(from: image) {
-            item.setData(data, forType: .png)
-        }
+        item.setData(data, forType: .png)
         let dragging = NSDraggingItem(pasteboardWriter: item)
         dragging.setDraggingFrame(bounds, contents: image)
         beginDraggingSession(with: [dragging], event: event, source: self)
     }
 
     override func mouseUp(with event: NSEvent) {
-        if !didBeginDrag, mouseDownLocation != nil {
+        let wasPendingDrag = pendingDragEvent != nil
+        pendingDragEvent = nil
+        if !didBeginDrag, !wasPendingDrag, mouseDownLocation != nil {
             onClick?()
         }
         mouseDownLocation = nil
