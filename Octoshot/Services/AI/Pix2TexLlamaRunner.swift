@@ -33,6 +33,7 @@ enum Pix2TexLlamaRunner {
             throw EmbeddedAIError.specialistFailed("Could not encode image")
         }
         try png.write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
 
         let output = try await runProcess(
             executable: cli,
@@ -45,7 +46,6 @@ enum Pix2TexLlamaRunner {
             ],
             workingDirectory: cli.deletingLastPathComponent()
         )
-        try? FileManager.default.removeItem(at: imageURL)
         return output
     }
 
@@ -55,33 +55,15 @@ enum Pix2TexLlamaRunner {
     }
 
     private static func runProcess(executable: URL, arguments: [String], workingDirectory: URL) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = executable
-            process.arguments = arguments
-            process.currentDirectoryURL = workingDirectory
-            var env = ProcessInfo.processInfo.environment
-            env["DYLD_LIBRARY_PATH"] = workingDirectory.path
-            process.environment = env
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.terminationHandler = { proc in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                if proc.terminationStatus == 0 {
-                    continuation.resume(returning: text)
-                } else {
-                    continuation.resume(throwing: EmbeddedAIError.specialistFailed(
-                        text.isEmpty ? "llama-mtmd exited \(proc.terminationStatus)" : text
-                    ))
-                }
-            }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
+        var env = ProcessInfo.processInfo.environment
+        env["DYLD_LIBRARY_PATH"] = workingDirectory.path
+        let result = try await SubprocessRunner.run(
+            executable: executable, arguments: arguments,
+            currentDirectory: workingDirectory, environment: env, timeout: 300)
+        guard result.terminationStatus == 0 else {
+            throw EmbeddedAIError.specialistFailed(
+                result.text.isEmpty ? "llama-mtmd exited \(result.terminationStatus)" : result.text)
         }
+        return result.text
     }
 }
