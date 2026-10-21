@@ -18,6 +18,44 @@ final class AnnotationCanvasExportTests: XCTestCase {
         return Data(bytes: try XCTUnwrap(context.data), count: image.width * image.height * 4)
     }
 
+    private func pngSamples(_ image: CGImage) throws -> Data {
+        let bytes = try XCTUnwrap(image.dataProvider?.data) as Data
+        let rowSize = image.width * 4
+        XCTAssertEqual(image.bitsPerComponent, 8)
+        XCTAssertEqual(image.bitsPerPixel, 32)
+        guard image.bytesPerRow >= rowSize, bytes.count >= image.bytesPerRow * image.height else {
+            XCTFail("Incomplete PNG pixel buffer")
+            return Data()
+        }
+        var samples = Data(capacity: rowSize * image.height)
+        for row in 0..<image.height {
+            let offset = row * image.bytesPerRow
+            samples.append(bytes[offset..<(offset + rowSize)])
+        }
+        return samples
+    }
+
+    private func assertWithinRoundingTolerance(_ actual: Data, _ expected: Data, label: String,
+                                             file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(actual.count, expected.count, label, file: file, line: line)
+        XCTAssertFalse(actual.isEmpty, label, file: file, line: line)
+        XCTAssertEqual(actual.count % 4, 0, label, file: file, line: line)
+        guard actual.count == expected.count, !actual.isEmpty, actual.count % 4 == 0 else { return }
+        for channel in 0..<4 {
+            var maximum = 0
+            var total = 0
+            for offset in stride(from: channel, to: actual.count, by: 4) {
+                let difference = abs(Int(actual[offset]) - Int(expected[offset]))
+                maximum = max(maximum, difference)
+                total += difference
+            }
+            let mean = Double(total) / Double(actual.count / 4)
+            let message = "\(label), channel \(channel): max=\(maximum), mean=\(mean)"
+            XCTAssertLessThanOrEqual(maximum, 2, message, file: file, line: line)
+            XCTAssertLessThanOrEqual(mean, 1.0, message, file: file, line: line)
+        }
+    }
+
     func testEditorAndCoreExportsAreEightBitAndMatchLegacyPNG() throws {
         for spaceName in [CGColorSpace.sRGB, CGColorSpace.displayP3] {
             let context = try XCTUnwrap(CGContext(data: nil, width: 64, height: 48, bitsPerComponent: 8,
@@ -74,10 +112,15 @@ final class AnnotationCanvasExportTests: XCTestCase {
                         XCTAssertTrue(try XCTUnwrap(NSBitmapImageRep(data: data)).hasAlpha)
                         XCTAssertEqual(decoded.bitmapInfo, legacyPNG.bitmapInfo)
                         XCTAssertEqual(decoded.bytesPerRow, legacyPNG.bytesPerRow)
-                        XCTAssertEqual(try XCTUnwrap(decoded.dataProvider?.data),
-                                       try XCTUnwrap(legacyPNG.dataProvider?.data))
+                        // lockFocus uses a display-dependent backing store; color matching and
+                        // premultiplication/PNG unpremultiplication can round differently from
+                        // the eager 8-bit bitmap. Bound every channel to 2 LSB and its mean to
+                        // 1 LSB, in both straight PNG samples and premultiplied RGBA; ignore padding.
+                        let label = "\(spaceName), \(editor ? "editor" : "core")"
+                        assertWithinRoundingTolerance(try pngSamples(decoded), try pngSamples(legacyPNG),
+                                                      label: "\(label), PNG")
                         let pixels = try rgba(decoded)
-                        XCTAssertEqual(pixels, try rgba(legacyPNG))
+                        assertWithinRoundingTolerance(pixels, try rgba(legacyPNG), label: "\(label), RGBA")
                         let alpha = stride(from: 3, to: pixels.count, by: 4).map { pixels[$0] }
                         XCTAssertTrue(alpha.contains(0))
                         XCTAssertTrue(alpha.contains { $0 > 0 && $0 < 255 })
