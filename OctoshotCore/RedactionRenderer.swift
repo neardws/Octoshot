@@ -47,19 +47,33 @@ public final class RedactionRenderer: @unchecked Sendable {
         cachedSource = nil
     }
 
-    public func patch(source: CGImage, region: CGRect, canvasSize: CGSize,
-                      kind: Kind, topLeftOrigin: Bool, useCache: Bool = true) throws -> CGImage {
+    /// The part of `region` that lies on the canvas, or nil when none of it does.
+    /// Callers draw the patch into this rectangle, so a box dragged past the edge still redacts what it covers.
+    public static func clippedRegion(_ region: CGRect, canvasSize: CGSize) -> CGRect? {
         guard canvasSize.width.isFinite, canvasSize.height.isFinite,
               canvasSize.width > 0, canvasSize.height > 0,
               region.origin.x.isFinite, region.origin.y.isFinite,
-              region.width.isFinite, region.height.isFinite,
-              region.width > 0, region.height > 0 else { throw RedactionError.invalidRegion }
+              region.width.isFinite, region.height.isFinite else { return nil }
+        let clipped = region.standardized.intersection(CGRect(origin: .zero, size: canvasSize))
+        guard !clipped.isNull, clipped.width > 0, clipped.height > 0 else { return nil }
+        return clipped
+    }
+
+    /// Filters the source pixels under `region`, clipped to the canvas.
+    /// Throws when nothing of the region is on the canvas, so export is blocked rather than left unredacted.
+    public func patch(source: CGImage, region: CGRect, canvasSize: CGSize,
+                      kind: Kind, topLeftOrigin: Bool, useCache: Bool = true) throws -> CGImage {
+        guard let region = Self.clippedRegion(region, canvasSize: canvasSize) else {
+            throw RedactionError.invalidRegion
+        }
         let scaleX = CGFloat(source.width) / canvasSize.width
         let scaleY = CGFloat(source.height) / canvasSize.height
+        // `integral` rounds outward, which can step one pixel past the edge; clip again in pixels.
         let crop = CGRect(x: region.minX * scaleX,
                           y: topLeftOrigin ? region.minY * scaleY : CGFloat(source.height) - region.maxY * scaleY,
                           width: region.width * scaleX, height: region.height * scaleY).integral
-        guard CGRect(x: 0, y: 0, width: source.width, height: source.height).contains(crop) else {
+            .intersection(CGRect(x: 0, y: 0, width: source.width, height: source.height))
+        guard !crop.isNull, crop.width >= 1, crop.height >= 1 else {
             throw RedactionError.invalidRegion
         }
         let parameter = kind == .blur ? 14 : 12
