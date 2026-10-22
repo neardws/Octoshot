@@ -155,8 +155,11 @@ public enum AnnotationRenderer {
         guard let image = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw RedactionError.unavailableSource
         }
-        let patch = try renderer.patch(source: image, region: region, canvasSize: source.size,
+        guard let visible = RedactionRenderer.clippedRegion(region, canvasSize: source.size) else {
+            throw RedactionError.invalidRegion
+        }
+        let patch = try renderer.patch(source: image, region: visible, canvasSize: source.size,
                                        kind: kind, topLeftOrigin: false)
-        NSImage(cgImage: patch, size: region.size).draw(in: region)
+        NSImage(cgImage: patch, size: visible.size).draw(in: visible)
     }
 }

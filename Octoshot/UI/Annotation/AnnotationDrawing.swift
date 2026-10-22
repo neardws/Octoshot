@@ -148,7 +148,9 @@ enum AnnotationDrawing {
         guard let source = sourceCGImage ?? sourceImage?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw RedactionError.unavailableSource
         }
-        let region = rect(from: start, to: end)
+        guard let region = RedactionRenderer.clippedRegion(rect(from: start, to: end), canvasSize: canvas.size) else {
+            throw RedactionError.invalidRegion
+        }
         let patch = try renderer.patch(source: source, region: region, canvasSize: canvas.size,
                                        kind: kind, topLeftOrigin: true)
         drawPatch(patch, in: region)

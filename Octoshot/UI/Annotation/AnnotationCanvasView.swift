@@ -414,6 +414,14 @@ final class AnnotationCanvasView: NSView {
             }
             return
         }
+        if activeTool == .blur || activeTool == .pixelate {
+            // A click without a drag, or a box entirely off the image, covers nothing.
+            // Saving it would make the renderer block the whole export.
+            let viewBox = AnnotationDrawing.rect(from: start, to: end)
+            guard viewBox.width > 2, viewBox.height > 2, let baseImage,
+                  RedactionRenderer.clippedRegion(AnnotationDrawing.rect(from: imageStart, to: imageEnd),
+                                                  canvasSize: baseImage.size) != nil else { return }
+        }
         appendStroke(AnnotationStroke(
             tool: activeTool,
             start: imageStart,
