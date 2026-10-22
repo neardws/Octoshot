@@ -205,4 +205,114 @@ final class ExportPipelineTests: XCTestCase {
         XCTAssertEqual(after.height, before.height)
         XCTAssertEqual(try rgba(after), try rgba(before))
     }
+
+    // MARK: - Redaction boxes past the image edge
+
+    /// Renderer stub that returns solid black at the requested pixel size, so tests need no GPU.
+    private func blackRenderer(extents: RenderExtents? = nil) -> RedactionRenderer {
+        RedactionRenderer(render: { _, extent in
+            extents?.append(extent)
+            let context = CGContext(data: nil, width: Int(extent.width), height: Int(extent.height),
+                                    bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            context?.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+            context?.fill(extent.offsetBy(dx: -extent.minX, dy: -extent.minY))
+            return context?.makeImage()
+        })
+    }
+
+    private final class RenderExtents: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [CGRect] = []
+        var all: [CGRect] { lock.lock(); defer { lock.unlock() }; return values }
+        func append(_ value: CGRect) { lock.lock(); values.append(value); lock.unlock() }
+    }
+
+    /// White 40×24 pt image at 2× (80×48 px).
+    private func whiteImage() throws -> NSImage {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 80, height: 48, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 80, height: 48))
+        return NSImage(cgImage: try XCTUnwrap(context.makeImage()), size: NSSize(width: 40, height: 24))
+    }
+
+    private func brightness(_ image: NSImage, x: Int, yFromTop: Int) throws -> CGFloat {
+        let cg = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        let color = try XCTUnwrap(NSBitmapImageRep(cgImage: cg).colorAt(x: x, y: yFromTop))
+        return try XCTUnwrap(color.usingColorSpace(.deviceRGB)).brightnessComponent
+    }
+
+    func testClippedRegionKeepsOnlyThePartOnTheCanvas() {
+        let canvas = CGSize(width: 40, height: 24)
+        XCTAssertEqual(RedactionRenderer.clippedRegion(CGRect(x: 30, y: 10, width: 20, height: 20), canvasSize: canvas),
+                       CGRect(x: 30, y: 10, width: 10, height: 14))
+        XCTAssertEqual(RedactionRenderer.clippedRegion(CGRect(x: -5, y: -5, width: 10, height: 10), canvasSize: canvas),
+                       CGRect(x: 0, y: 0, width: 5, height: 5))
+        XCTAssertEqual(RedactionRenderer.clippedRegion(CGRect(x: 10, y: 10, width: -4, height: -4), canvasSize: canvas),
+                       CGRect(x: 6, y: 6, width: 4, height: 4), "boxes dragged up and left are normalized")
+        XCTAssertNil(RedactionRenderer.clippedRegion(CGRect(x: 50, y: 0, width: 10, height: 10), canvasSize: canvas))
+        XCTAssertNil(RedactionRenderer.clippedRegion(CGRect(x: 40, y: 0, width: 10, height: 10), canvasSize: canvas),
+                     "touching the edge from outside covers nothing")
+        XCTAssertNil(RedactionRenderer.clippedRegion(CGRect(x: 5, y: 5, width: 0, height: 0), canvasSize: canvas))
+        XCTAssertNil(RedactionRenderer.clippedRegion(CGRect(x: CGFloat.nan, y: 0, width: 5, height: 5), canvasSize: canvas))
+        XCTAssertNil(RedactionRenderer.clippedRegion(CGRect(x: 0, y: 0, width: 5, height: 5), canvasSize: .zero))
+    }
+
+    func testPatchPastTheEdgeCoversTheVisiblePart() throws {
+        let extents = RenderExtents()
+        let renderer = blackRenderer(extents: extents)
+        let source = try XCTUnwrap(whiteImage().cgImage(forProposedRect: nil, context: nil, hints: nil))
+        let canvas = CGSize(width: 40, height: 24)
+        for topLeft in [true, false] {
+            let patch = try renderer.patch(source: source, region: CGRect(x: 30, y: 10, width: 20, height: 20),
+                                           canvasSize: canvas, kind: .blur, topLeftOrigin: topLeft, useCache: false)
+            XCTAssertEqual(patch.width, 20)
+            XCTAssertEqual(patch.height, 28)
+        }
+        // Fractional edges that round one pixel past the image still render.
+        let edge = try renderer.patch(source: source, region: CGRect(x: 0.3, y: 0.3, width: 39.9, height: 23.9),
+                                      canvasSize: canvas, kind: .pixelate, topLeftOrigin: true, useCache: false)
+        XCTAssertEqual(edge.width, 80)
+        XCTAssertEqual(edge.height, 48)
+        for extent in extents.all {
+            XCTAssertTrue(CGRect(x: 0, y: 0, width: 80, height: 48).contains(extent))
+        }
+    }
+
+    func testPatchEntirelyOffTheImageStillThrows() throws {
+        let renderer = blackRenderer()
+        let source = try XCTUnwrap(whiteImage().cgImage(forProposedRect: nil, context: nil, hints: nil))
+        for region in [CGRect(x: 41, y: 0, width: 10, height: 10), CGRect(x: -20, y: -20, width: 10, height: 10),
+                       CGRect(x: 5, y: 5, width: 0, height: 8)] {
+            XCTAssertThrowsError(try renderer.patch(source: source, region: region,
+                                                    canvasSize: CGSize(width: 40, height: 24),
+                                                    kind: .blur, topLeftOrigin: true)) {
+                XCTAssertEqual($0 as? RedactionError, .invalidRegion)
+            }
+        }
+    }
+
+    func testAgentBlurPastTheEdgeRedactsInsteadOfBlockingExport() throws {
+        // AppKit points with a bottom-left origin: covers x 30–40, y 10–24 of a 40×24 image (its top-right corner).
+        let specification = try JSONDecoder().decode(AgentAnnotationSpec.self, from: Data(
+            "{\"annotations\":[{\"type\":\"blur\",\"from\":[30,10],\"to\":[60,40]}]}".utf8))
+
+        let output = try AnnotationRenderer.apply(spec: specification, to: whiteImage(), renderer: blackRenderer())
+
+        XCTAssertEqual(try brightness(output, x: 70, yFromTop: 4), 0, accuracy: 0.01, "visible part is redacted")
+        XCTAssertEqual(try brightness(output, x: 70, yFromTop: 40), 1, accuracy: 0.01, "below the box is untouched")
+        XCTAssertEqual(try brightness(output, x: 10, yFromTop: 4), 1, accuracy: 0.01, "left of the box is untouched")
+    }
+
+    func testAgentBlurEntirelyOffTheImageBlocksExport() throws {
+        let specification = try JSONDecoder().decode(AgentAnnotationSpec.self, from: Data(
+            "{\"annotations\":[{\"type\":\"blur\",\"from\":[50,0],\"to\":[60,10]}]}".utf8))
+        XCTAssertThrowsError(try AnnotationRenderer.apply(spec: specification, to: whiteImage(),
+                                                          renderer: blackRenderer())) {
+            XCTAssertTrue($0 is RedactionError)
+        }
+    }
 }
