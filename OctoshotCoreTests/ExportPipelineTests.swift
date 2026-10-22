@@ -239,10 +239,11 @@ final class ExportPipelineTests: XCTestCase {
         return NSImage(cgImage: try XCTUnwrap(context.makeImage()), size: NSSize(width: 40, height: 24))
     }
 
-    private func brightness(_ image: NSImage, x: Int, yFromTop: Int) throws -> CGFloat {
-        let cg = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
-        let color = try XCTUnwrap(NSBitmapImageRep(cgImage: cg).colorAt(x: x, y: yFromTop))
-        return try XCTUnwrap(color.usingColorSpace(.deviceRGB)).brightnessComponent
+    private func brightness(_ image: CGImage, x: Int, yFromTop: Int) throws -> CGFloat {
+        let offset = try XCTUnwrap((0..<image.width).contains(x) && (0..<image.height).contains(yFromTop)
+            ? (yFromTop * image.width + x) * 4 : nil, "Sample must be within the actual pixel bounds")
+        let bytes = try rgba(image)
+        return CGFloat(max(bytes[offset], bytes[offset + 1], bytes[offset + 2])) / 255
     }
 
     func testClippedRegionKeepsOnlyThePartOnTheCanvas() {
@@ -301,10 +302,14 @@ final class ExportPipelineTests: XCTestCase {
             "{\"annotations\":[{\"type\":\"blur\",\"from\":[30,10],\"to\":[60,40]}]}".utf8))
 
         let output = try AnnotationRenderer.apply(spec: specification, to: whiteImage(), renderer: blackRenderer())
+        let rendered = try XCTUnwrap(output.cgImage(forProposedRect: nil, context: nil, hints: nil))
 
-        XCTAssertEqual(try brightness(output, x: 70, yFromTop: 4), 0, accuracy: 0.01, "visible part is redacted")
-        XCTAssertEqual(try brightness(output, x: 70, yFromTop: 40), 1, accuracy: 0.01, "below the box is untouched")
-        XCTAssertEqual(try brightness(output, x: 10, yFromTop: 4), 1, accuracy: 0.01, "left of the box is untouched")
+        XCTAssertEqual(try brightness(rendered, x: rendered.width * 7 / 8, yFromTop: rendered.height / 12),
+                       0, accuracy: 0.01, "visible part is redacted")
+        XCTAssertEqual(try brightness(rendered, x: rendered.width * 7 / 8, yFromTop: rendered.height * 5 / 6),
+                       1, accuracy: 0.01, "below the box is untouched")
+        XCTAssertEqual(try brightness(rendered, x: rendered.width / 8, yFromTop: rendered.height / 12),
+                       1, accuracy: 0.01, "left of the box is untouched")
     }
 
     func testAgentBlurEntirelyOffTheImageBlocksExport() throws {
