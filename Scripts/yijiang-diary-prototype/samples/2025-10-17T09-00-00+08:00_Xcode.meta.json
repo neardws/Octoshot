@@ -1,0 +1,5 @@
+{
+  "timestamp": "2025-10-17T09:00:00+08:00",
+  "frontmostApp": "Xcode",
+  "accessibilityText": "struct YijiangDiaryEntry {\n    let timestamp: Date\n}"
+}
