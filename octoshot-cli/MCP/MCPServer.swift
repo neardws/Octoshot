@@ -159,7 +159,7 @@ actor MCPStdioServer {
             let url = str("output").map { URL(fileURLWithPath: $0) }
                 ?? AgentConfiguration.saveDirectory.appendingPathComponent("redacted-\(UUID().uuidString).png")
             try ImageFormats.writePNG(image: out, to: url)
-            return "{\"path\":\"\(url.path)\"}"
+            return try encodeMCPFileResult(["path": url.path])
         case "ask_ai":
             guard let path = str("path"), let prompt = str("prompt") else { throw CaptureError.captureFailed("path and prompt required") }
             let image = try AgentCaptureEngine.loadImage(path: path)
@@ -173,7 +173,7 @@ actor MCPStdioServer {
             let image = try AgentCaptureEngine.loadImage(path: path)
             if bool("save_clip") {
                 let folder = try await AgentProcessing.extractTableAndSaveClip(image: image)
-                return "{\"clipFolder\":\"\(folder.path)\"}"
+                return try encodeMCPFileResult(["clipFolder": folder.path])
             }
             return try await AgentProcessing.extractTable(image: image)
         case "annotate":
@@ -185,7 +185,7 @@ actor MCPStdioServer {
             let out = str("output").map { URL(fileURLWithPath: $0) }
                 ?? AgentConfiguration.saveDirectory.appendingPathComponent("annotated-\(UUID().uuidString).png")
             try ImageFormats.writePNG(image: annotated, to: out)
-            return "{\"path\":\"\(out.path)\"}"
+            return try encodeMCPFileResult(["path": out.path])
         case "record_start":
             let mode = str("mode") ?? "fullscreen"
             let format = str("format") ?? "video"
