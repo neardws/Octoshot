@@ -70,6 +70,7 @@ targets:
     platform: macOS
     sources:
       - path: OctoshotCoreTests
+      - path: octoshot-cli/MCP/MCPFileResult.swift
       - path: Octoshot/UI/Annotation/AnnotationModels.swift
       - path: Octoshot/UI/Annotation/AnnotationDrawing.swift
       - path: Octoshot/UI/Annotation/AnnotationCanvasView.swift
