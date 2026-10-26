@@ -44,14 +44,20 @@ public enum AgentProcessing {
 
     static func convertMarkdownTableToCSV(_ markdown: String) -> String? {
         let lines = markdown.split(separator: "\n").map(String.init)
-        let rows = lines.filter { $0.contains("|") && !$0.contains("---") }
+        let rows = lines.filter { $0.contains("|") }
         guard !rows.isEmpty else { return nil }
-        return CSVEncoder.encode(rows.map { row in
+        var parsedRows = rows.map { row in
             var fields = row.trimmingCharacters(in: .whitespaces).split(separator: "|", omittingEmptySubsequences: false).map(String.init)
             if fields.first?.isEmpty == true { fields.removeFirst() }
             if fields.last?.isEmpty == true { fields.removeLast() }
             return fields.map { $0.trimmingCharacters(in: .whitespaces) }
-        })
+        }
+        if parsedRows.count > 1,
+           parsedRows[1].count == parsedRows[0].count,
+           parsedRows[1].allSatisfy({ $0.range(of: "^:?-{3,}:?$", options: .regularExpression) != nil }) {
+            parsedRows.remove(at: 1)
+        }
+        return CSVEncoder.encode(parsedRows)
     }
 }
 
