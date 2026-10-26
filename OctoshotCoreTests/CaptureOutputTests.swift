@@ -66,6 +66,48 @@ final class CaptureOutputTests: XCTestCase {
                        "\"a,b\",\"say \"\"hi\"\"\",\"line\rbreak\",\"line\nbreak\",\r\nplain,2")
     }
 
+    func testMarkdownTableExportExcludesHeaderDelimiter() {
+        XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note |\n| --- | --- |\n| Jane | Ready |"),
+                       "Name,Note\r\nJane,Ready")
+    }
+
+    func testMarkdownTableExportKeepsEmbeddedTripleDash() {
+        XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note |\n| --- | --- |\n| Jane | A---B |"),
+                       "Name,Note\r\nJane,A---B")
+    }
+
+    func testMarkdownTableExportKeepsTripleDashCell() {
+        XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note |\n| --- | --- |\n| Jane | --- |"),
+                       "Name,Note\r\nJane,---")
+    }
+
+    func testMarkdownTableExportKeepsAllTripleDashBodyRows() {
+        XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note |\n| --- | --- |\n| --- | --- |\n| Jane | Ready |\n| --- | --- |"),
+                       "Name,Note\r\n---,---\r\nJane,Ready\r\n---,---")
+    }
+
+    func testMarkdownTableExportExcludesAlignedHeaderDelimiter() {
+        for delimiter in ["  | :--- | ---: | :---: |  ", "\t:--- | ---: | :---:\t", "| :---- | ----: | :----: |"] {
+            XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Left | Right | Center |\n\(delimiter)\n| A | B | C |"),
+                           "Left,Right,Center\r\nA,B,C", delimiter)
+        }
+    }
+
+    func testMarkdownTableExportKeepsNonDelimiterSecondRow() {
+        for (row, csv) in [("| A---B | --- |", "A---B,---"),
+                           ("| --- | |", "---,"),
+                           ("| -- | --- |", "--,---"),
+                           ("| --- | --- | --- |", "---,---,---")] {
+            XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note |\n\(row)"),
+                           "Name,Note\r\n\(csv)", row)
+        }
+    }
+
+    func testMarkdownTableExportKeepsTripleDashHeader() {
+        XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| --- | A---B |\n| --- | --- |\n| Jane | Ready |"),
+                       "---,A---B\r\nJane,Ready")
+    }
+
     func testMarkdownTableExportKeepsEmptyColumnsAndEscapes() {
         XCTAssertEqual(AgentProcessing.convertMarkdownTableToCSV("| Name | Note | Empty |\n| --- | --- | --- |\n| Doe, Jane | Say \"hello\" | |"),
                        "Name,Note,Empty\r\n\"Doe, Jane\",\"Say \"\"hello\"\"\","
