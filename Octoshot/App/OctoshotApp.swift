@@ -6,6 +6,7 @@ enum OctoshotMain {
     @MainActor
     static func main() {
         #if DEBUG
+        DiarySnapshotHarness.runIfRequested()
         QuickAccessSnapshotHarness.runIfRequested()
         #endif
         OctoshotApp.main()

@@ -1,8 +1,9 @@
 import AppKit
 import OctoshotCore
+import UserNotifications
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: NSStatusItem?
     private let hotkeyManager = HotkeyManager()
     private var receivedAutomationURL = false
@@ -14,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         SettingsOpener.installAccessoryRestoreOnClose()
         setupStatusItem()
+        UNUserNotificationCenter.current().delegate = self
+        DiaryReportCoordinator.shared.reschedule()
         setupHelpMenu()
         applyMenuBarVisibility()
         setupHotkeys()
@@ -59,6 +62,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregisterAll()
     }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           response.notification.request.content.userInfo["diaryDate"] as? String == "deliveryDate" {
+            let day = response.notification.date
+            Task { @MainActor in DiaryReportCoordinator.shared.open(day: day) }
+        }
+        completionHandler()
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner])
+    }
+
+    @objc private func openTodayDiary() { DiaryReportCoordinator.shared.open(day: Date()) }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         if urls.contains(where: { $0.scheme?.lowercased() == "octoshot" }) { receivedAutomationURL = true }
@@ -126,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsItem = menuItem("Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = .command
         menu.addItem(settingsItem)
+        menu.addItem(menuItem(OctoshotL10n.text("Read today's diary"), action: #selector(openTodayDiary)))
         menu.addItem(menuItem("Help…", action: #selector(openHelp)))
         menu.addItem(menuItem(OctoshotL10n.checkForUpdates, action: #selector(checkForUpdates)))
 

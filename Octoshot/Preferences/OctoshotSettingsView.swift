@@ -78,6 +78,8 @@ struct OctoshotSettingsView: View {
             AnnotationSettingsPane()
         case .ai:
             SettingsAIPane()
+        case .diary:
+            SettingsDiaryPane()
         case .developer:
             DeveloperSettingsPane()
         case .about:
