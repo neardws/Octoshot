@@ -46,6 +46,74 @@ final class QuickAccessDragPayloadTests: XCTestCase {
         XCTAssertNotNil(CGImageSourceCreateImageAtIndex(source, 0, nil))
     }
 
+    func testPasteboardRoundTripPreservesFileURLPNGAndTIFF() async throws {
+        let date = now
+        let payload = try await QuickAccessDragPayload.prepare(snapshot(), temporaryDirectory: temporaryDirectory, now: { date })
+        let writer = QuickAccessDragPasteboardWriter(payload: payload)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer {
+            pasteboard.clearContents()
+            pasteboard.releaseGlobally()
+        }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([writer]))
+        let types = try XCTUnwrap(pasteboard.types)
+        for expected in QuickAccessDragPayload.pasteboardTypes {
+            XCTAssertTrue(types.contains(expected), "missing pasteboard type \(expected.rawValue); got \(types.map(\.rawValue))")
+        }
+
+        let fileURLString = try XCTUnwrap(pasteboard.string(forType: .fileURL))
+        let fileURL = try XCTUnwrap(URL(string: fileURLString))
+        XCTAssertTrue(fileURL.isFileURL)
+        XCTAssertEqual(fileURL.standardizedFileURL, payload.fileURL.standardizedFileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+
+        let pngData = try XCTUnwrap(pasteboard.data(forType: .png))
+        XCTAssertFalse(pngData.isEmpty)
+        XCTAssertEqual(pngData, payload.pngData)
+        let pngSource = try XCTUnwrap(CGImageSourceCreateWithData(pngData as CFData, nil))
+        XCTAssertEqual(CGImageSourceGetType(pngSource) as String?, "public.png")
+        let pngImage = try XCTUnwrap(CGImageSourceCreateImageAtIndex(pngSource, 0, nil))
+        XCTAssertEqual(pngImage.width, 8)
+        XCTAssertEqual(pngImage.height, 6)
+
+        let tiffData = try XCTUnwrap(pasteboard.data(forType: .tiff))
+        XCTAssertFalse(tiffData.isEmpty)
+        XCTAssertEqual(tiffData, payload.tiffData)
+        let tiffSource = try XCTUnwrap(CGImageSourceCreateWithData(tiffData as CFData, nil))
+        XCTAssertEqual(CGImageSourceGetType(tiffSource) as String?, "public.tiff")
+        let tiffImage = try XCTUnwrap(CGImageSourceCreateImageAtIndex(tiffSource, 0, nil))
+        XCTAssertEqual(tiffImage.width, 8)
+        XCTAssertEqual(tiffImage.height, 6)
+    }
+
+    func testFileURLOnlyPasteboardConsumerReadsDecodablePNG() async throws {
+        let date = now
+        let payload = try await QuickAccessDragPayload.prepare(snapshot(), temporaryDirectory: temporaryDirectory, now: { date })
+        let writer = QuickAccessDragPasteboardWriter(payload: payload)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer {
+            pasteboard.clearContents()
+            pasteboard.releaseGlobally()
+        }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([writer]))
+
+        let fileURLString = try XCTUnwrap(pasteboard.string(forType: .fileURL))
+        let fileURL = try XCTUnwrap(URL(string: fileURLString))
+        XCTAssertTrue(fileURL.isFileURL)
+        XCTAssertEqual(fileURL.standardizedFileURL, payload.fileURL.standardizedFileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        let data = try Data(contentsOf: fileURL)
+        XCTAssertFalse(data.isEmpty)
+        XCTAssertEqual(data, payload.pngData)
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
+        XCTAssertEqual(CGImageSourceGetType(source) as String?, "public.png")
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        XCTAssertEqual(image.width, 8)
+        XCTAssertEqual(image.height, 6)
+    }
+
     func testPreparationWritesDecodablePNGOffMain() async throws {
         let date = now
         let payload = try await QuickAccessDragPayload.prepare(snapshot(), temporaryDirectory: temporaryDirectory, now: {
