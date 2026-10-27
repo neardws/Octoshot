@@ -34,14 +34,24 @@ enum DiarySnapshotHarness {
                 windows += try aggregator.observe(nil, at: start.addingTimeInterval(600))
             }
             let builder = DiaryReportBuilder(calendar: calendar, clock: { day.addingTimeInterval(22 * 3600) })
-            let roast = DiaryPlaceholderRoastProvider()
+            let roast = DiaryPreparedRoasts(lines: windows.enumerated().compactMap { index, window in
+                let ending = DiaryRoastQualityGate.endings[index % DiaryRoastQualityGate.endings.count]
+                let synthetic = "「\(window.entries[0].windowTitle.prefix(14))」，\(ending)。"
+                return DiaryRoastQualityGate.accept(synthetic, for: window).map { (window, $0) }
+            })
             try render(DiaryReportView(report: builder.build(windows: windows, day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 2400), to: destination.appendingPathComponent("diary-report-full.png"))
             try render(DiaryReportView(report: builder.build(windows: [], day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 900), to: destination.appendingPathComponent("diary-report-empty.png"))
             let model = DiaryReportCoordinator(defaults: SettingsSnapshotDefaults())
-            try render(SettingsDiaryPane(model: model), size: NSSize(width: 780, height: 700),
+            try render(SettingsDiaryPane(model: model, preview: .init()), size: NSSize(width: 780, height: 950),
                        to: destination.appendingPathComponent("settings-diary.png"))
+            try render(SettingsDiaryPane(model: model, preview: .init(downloading: true, fraction: 0.42,
+                status: "离线演示：下载 model.safetensors · 924 / 2200 MB（当前文件）")),
+                size: NSSize(width: 780, height: 950), to: destination.appendingPathComponent("settings-diary-progress.png"))
+            try render(SettingsDiaryPane(model: model, preview: .init(installed: true,
+                status: "离线演示：已校验模型文件", failureReason: "今天已停用 MiniCPM 吐槽：连续三次超时；明天自动重试，文字日记不受影响。")),
+                size: NSSize(width: 780, height: 950), to: destination.appendingPathComponent("settings-diary-installed.png"))
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("Diary snapshot failed: \(error)\n".utf8))

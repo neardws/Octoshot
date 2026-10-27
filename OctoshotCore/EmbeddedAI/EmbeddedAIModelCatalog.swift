@@ -3,9 +3,11 @@ import Foundation
 public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
     case smolVLM2_500M_4bit
     case pix2texMFR_Q4
+    case miniCPMV46_4bit
 
     public var displayName: String {
         switch self {
+        case .miniCPMV46_4bit: return "MiniCPM-V-4.6 (MLX 4-bit)"
         case .smolVLM2_500M_4bit: return "SmolVLM2-500M (MLX 4-bit)"
         case .pix2texMFR_Q4: return "pix2tex-mfr (Q4_K)"
         }
@@ -14,6 +16,7 @@ public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
     /// Hugging Face repo id (weights downloaded on demand).
     public var huggingFaceRepo: String {
         switch self {
+        case .miniCPMV46_4bit: return "mlx-community/MiniCPM-V-4.6-4bit"
         case .smolVLM2_500M_4bit:
             return "mlx-community/SmolVLM2-500M-Video-Instruct-mlx-4bit"
         case .pix2texMFR_Q4:
@@ -23,6 +26,7 @@ public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
 
     public var approximateSizeMB: Int {
         switch self {
+        case .miniCPMV46_4bit: return 2200
         case .smolVLM2_500M_4bit: return 292
         case .pix2texMFR_Q4: return 18
         }
@@ -30,6 +34,7 @@ public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
 
     public var licenseNote: String {
         switch self {
+        case .miniCPMV46_4bit: return "Apache-2.0 (MiniCPM / mlx-community weights)"
         case .smolVLM2_500M_4bit:
             return "Apache-2.0 (Hugging FaceTB / mlx-community weights)"
         case .pix2texMFR_Q4:
@@ -40,14 +45,14 @@ public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
     /// Primary GGUF filename for pix2tex; VLM uses full repo tree.
     public var primaryGGUFFileName: String? {
         switch self {
-        case .smolVLM2_500M_4bit: return nil
+        case .smolVLM2_500M_4bit, .miniCPMV46_4bit: return nil
         case .pix2texMFR_Q4: return "pix2tex-mfr-q4_k.gguf"
         }
     }
 
     public var legacyGGUFFileNames: [String] {
         switch self {
-        case .smolVLM2_500M_4bit: return []
+        case .smolVLM2_500M_4bit, .miniCPMV46_4bit: return []
         case .pix2texMFR_Q4: return ["pix2tex-mfr-Q4_K.gguf"]
         }
     }
@@ -85,6 +90,9 @@ public enum EmbeddedAIModelPaths {
 
     public static func isInstalled(_ model: EmbeddedModelID, in dir: URL) -> Bool {
         guard FileManager.default.fileExists(atPath: dir.path) else { return false }
+        if model == .miniCPMV46_4bit {
+            return DiaryModelDownload.isInstalled(in: dir)
+        }
         if model.primaryGGUFFileName != nil {
             return model.resolvedLocalGGUFURL(in: dir) != nil
         }

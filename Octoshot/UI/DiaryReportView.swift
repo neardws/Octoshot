@@ -69,8 +69,10 @@ struct DiaryReportView: View {
                         }.frame(maxWidth: .infinity, alignment: .leading)
                         Divider()
                     }
-                    Text("一酱总结").font(.title2.bold())
-                    if let roast = report.closingRoast { callout(roast) }
+                    if let roast = report.closingRoast {
+                        Text("一酱总结").font(.title2.bold())
+                        callout(roast)
+                    }
                 }.padding(28)
             }
             Divider()
