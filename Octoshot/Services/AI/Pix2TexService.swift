@@ -12,11 +12,11 @@ final class Pix2TexService: EmbeddedLaTeXBackend, @unchecked Sendable {
     }
 
     func toLaTeX(image: NSImage) async throws -> String {
-        guard EmbeddedAIModelPaths.isInstalled(.pix2texMFR_Q4) else {
+        guard let modelPath = EmbeddedModelID.pix2texMFR_Q4.resolvedLocalGGUFURL(
+            in: EmbeddedAIModelPaths.directory(for: .pix2texMFR_Q4)
+        ) else {
             throw EmbeddedAIError.modelNotInstalled(.pix2texMFR_Q4)
         }
-        let modelPath = EmbeddedAIModelPaths.directory(for: .pix2texMFR_Q4)
-            .appendingPathComponent(EmbeddedModelID.pix2texMFR_Q4.primaryGGUFFileName ?? "pix2tex-mfr-Q4_K.gguf")
         let raw = try await Pix2TexLlamaRunner.run(image: image, modelPath: modelPath)
         return cleanLaTeXOutput(raw)
     }

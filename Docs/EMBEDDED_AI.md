@@ -5,9 +5,11 @@
 | Role | Hugging Face | On-disk folder |
 |------|----------------|----------------|
 | Light VLM | `mlx-community/SmolVLM2-500M-Video-Instruct-mlx-4bit` | `~/Library/Application Support/Octoshot/Models/smolVLM2_500M_4bit/` |
-| LaTeX specialist | `cstr/pix2tex-mfr-gguf` (`pix2tex-mfr-Q4_K.gguf`) | `~/Library/Application Support/Octoshot/Models/pix2texMFR_Q4/` |
+| LaTeX specialist | `cstr/pix2tex-mfr-gguf` (`pix2tex-mfr-q4_k.gguf`) | `~/Library/Application Support/Octoshot/Models/pix2texMFR_Q4/` |
 
 Weights are **never** bundled in the app; use **Settings → AI** or onboarding to download.
+
+New pix2tex downloads use the canonical lowercase filename `pix2tex-mfr-q4_k.gguf`. The legacy `pix2tex-mfr-Q4_K.gguf` filename is still accepted locally without re-downloading; if both exist, the canonical lowercase file is preferred.
 
 ## MLX (SmolVLM2)
 
