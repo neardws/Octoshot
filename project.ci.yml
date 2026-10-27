@@ -35,6 +35,8 @@ targets:
   OctoshotCore:
     type: framework
     platform: macOS
+    dependencies:
+      - sdk: libsqlite3.tbd
     sources:
       - path: OctoshotCore
     settings:

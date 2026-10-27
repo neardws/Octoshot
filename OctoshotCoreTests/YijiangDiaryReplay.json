@@ -1,0 +1,15 @@
+[
+  {"timestamp":"2026-10-01T00:00:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Plan","focusedText":"Contact synthetic@example.com for synthetic notes","urlHost":"https://example.com/private?q=secret"},
+  {"timestamp":"2026-10-01T00:02:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Plan","focusedText":"Contact synthetic@example.com for synthetic notes"},
+  {"timestamp":"2026-10-01T00:10:00Z","appBundleID":"test.editor","appName":"Editor","windowTitle":"Code","focusedText":"Implement offline tests"},
+  {"timestamp":"2026-10-01T00:12:00Z","appBundleID":"test.editor","appName":"Editor","windowTitle":"Code","focusedText":"Implement offline tests"},
+  {"timestamp":"2026-10-01T00:15:00Z","appBundleID":"com.1password.1password","appName":"1Password","windowTitle":"EXCLUDED_SECRET","focusedText":"EXCLUDED_SECRET"},
+  {"timestamp":"2026-10-01T00:20:00Z","appBundleID":"test.browser","appName":"Browser","windowTitle":"Research","focusedText":"Synthetic documentation"},
+  {"timestamp":"2026-10-01T00:22:00Z","appBundleID":"test.browser","appName":"Browser","windowTitle":"Research","focusedText":"Synthetic documentation"},
+  {"timestamp":"2026-10-01T00:30:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Outline","focusedText":"Outline a fictional project"},
+  {"timestamp":"2026-10-01T00:32:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Outline","focusedText":"Outline a fictional project"},
+  {"timestamp":"2026-10-01T00:40:00Z","appBundleID":"test.editor","appName":"Editor","windowTitle":"Review","focusedText":"Review synthetic code"},
+  {"timestamp":"2026-10-01T00:42:00Z","appBundleID":"test.editor","appName":"Editor","windowTitle":"Review","focusedText":"Review synthetic code"},
+  {"timestamp":"2026-10-01T00:50:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Wrap up","focusedText":"Finish synthetic checklist"},
+  {"timestamp":"2026-10-01T00:52:00Z","appBundleID":"test.notes","appName":"Notes","windowTitle":"Wrap up","focusedText":"Finish synthetic checklist"}
+]
