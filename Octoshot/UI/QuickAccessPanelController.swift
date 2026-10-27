@@ -958,7 +958,7 @@ final class DraggableImageView: NSImageView {
     private var mouseDownLocation: NSPoint?
     private var didBeginDrag = false
     private let dragThreshold: CGFloat = 5
-    private var dragData: Data?
+    private var dragPayload: QuickAccessDragPayload?
     private var dragError: Error?
     private var preparationID = UUID()
     private var pendingDragEvent: NSEvent?
@@ -966,7 +966,7 @@ final class DraggableImageView: NSImageView {
     private func prepareDragData() {
         let identifier = UUID()
         preparationID = identifier
-        dragData = nil
+        dragPayload = nil
         dragError = nil
         pendingDragEvent = nil
         guard let image = dragImage else { return }
@@ -974,9 +974,9 @@ final class DraggableImageView: NSImageView {
             let snapshot = try ImageFormats.snapshot(image)
             Task { @MainActor [weak self] in
                 do {
-                    let data = try await ImageFormats.encodeAsync(snapshot, format: .png, jpegQuality: 1)
+                    let payload = try await QuickAccessDragPayload.prepare(snapshot)
                     guard let self, self.preparationID == identifier else { return }
-                    self.dragData = data
+                    self.dragPayload = payload
                     self.startPreparedDrag()
                 } catch {
                     guard let self, self.preparationID == identifier else { return }
@@ -1002,6 +1002,9 @@ final class DraggableImageView: NSImageView {
     override func draw(_ dirtyRect: NSRect) {}
 
     override func mouseDown(with event: NSEvent) {
+        if let dragPayload, Date().timeIntervalSince(dragPayload.preparedAt) >= QuickAccessDragPayload.maximumAge {
+            prepareDragData()
+        }
         pendingDragEvent = nil
         mouseDownLocation = convert(event.locationInWindow, from: nil)
         didBeginDrag = false
@@ -1023,15 +1026,13 @@ final class DraggableImageView: NSImageView {
 
     private func startPreparedDrag() {
         guard !didBeginDrag, let event = pendingDragEvent, let image = dragImage,
-              let data = dragData, mouseDownLocation != nil,
+              let payload = dragPayload, mouseDownLocation != nil,
               NSEvent.pressedMouseButtons & 1 != 0 else { return }
         pendingDragEvent = nil
         didBeginDrag = true
         mouseDownLocation = nil
 
-        let item = NSPasteboardItem()
-        item.setData(data, forType: .png)
-        let dragging = NSDraggingItem(pasteboardWriter: item)
+        let dragging = NSDraggingItem(pasteboardWriter: QuickAccessDragPasteboardWriter(payload: payload))
         dragging.setDraggingFrame(bounds, contents: image)
         beginDraggingSession(with: [dragging], event: event, source: self)
     }
@@ -1052,7 +1053,7 @@ extension DraggableImageView: NSDraggingSource {
         _ session: NSDraggingSession,
         sourceOperationMaskFor context: NSDraggingContext
     ) -> NSDragOperation {
-        .copy
+        context == .outsideApplication ? [.copy, .generic] : []
     }
 
     func draggingSession(
@@ -1060,7 +1061,8 @@ extension DraggableImageView: NSDraggingSource {
         endedAt screenPoint: NSPoint,
         operation: NSDragOperation
     ) {
-        onDragEnded?(operation.rawValue)
+        let droppedOnPanel = window?.frame.contains(screenPoint) == true
+        onDragEnded?(droppedOnPanel ? 0 : operation.rawValue)
     }
 }
 
