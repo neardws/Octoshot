@@ -278,5 +278,6 @@ final class QuickAccessLayoutTests: XCTestCase {
     func testDragOutcomeRemovesOnlyOnSuccessfulDrop() {
         XCTAssertEqual(QuickAccessDragOutcome.fromEndedDragOperation(0), .keep)
         XCTAssertEqual(QuickAccessDragOutcome.fromEndedDragOperation(1), .removeFromStack)
+        XCTAssertEqual(QuickAccessDragOutcome.fromEndedDragOperation(4), .removeFromStack)
     }
 }
