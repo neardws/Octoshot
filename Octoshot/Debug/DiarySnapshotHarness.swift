@@ -18,20 +18,25 @@ enum DiarySnapshotHarness {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
             let day = calendar.date(from: DateComponents(year: 2026, month: 10, day: 27))!
-            let apps = ["Cursor", "Safari", "Terminal", "Notes", "Safari", "Cursor"]
-            let titles = ["示例项目 · 日报布局", "示例文档", "示例测试", "示例待办", "示例参考资料", "示例项目 · 收尾"]
+            let apps = ["Cursor", "Safari", "Cursor", "Safari", "Cursor", "Cursor", "Terminal", "Notes"]
+            let titles = ["示例项目 · 日报布局", "示例文档 · 焦点切换", "示例项目 · 日报布局", "示例文档 · Markdown",
+                          "示例项目 · 骨架聚合", "示例项目 · 日报收尾", "示例测试 · 聚合边界", "示例待办 · 验收记录"]
+            let snippets = ["聚合日报；焦点切换", "相邻 App 切换；同窗条目合并", "日报布局；文字优先",
+                            "Markdown 标题；转义字符", "窗口标题去重；骨架文字分组", "空日报；导出预览",
+                            "跨日窗口测试；固定时钟", "核对预览；待确认空状态"]
             var windows: [DiaryWindowSkeleton] = []
             for index in apps.indices {
-                let start = day.addingTimeInterval(Double(9 + index * 2) * 3600)
+                let start = day.addingTimeInterval(9 * 3600 + Double(index) * 600)
                 let aggregator = DiaryWindowAggregator(clock: { start.addingTimeInterval(600) })
                 _ = try aggregator.append(DiaryActivitySample(timestamp: start, appBundleID: "example." + apps[index],
-                    appName: apps[index], windowTitle: titles[index]))
+                    appName: apps[index], windowTitle: titles[index], focusedText: snippets[index],
+                    urlHost: apps[index] == "Safari" ? "docs.example.com" : nil))
                 windows += try aggregator.observe(nil, at: start.addingTimeInterval(600))
             }
             let builder = DiaryReportBuilder(calendar: calendar, clock: { day.addingTimeInterval(22 * 3600) })
             let roast = DiaryPlaceholderRoastProvider()
             try render(DiaryReportView(report: builder.build(windows: windows, day: day, roastProvider: roast)),
-                       size: NSSize(width: 900, height: 1400), to: destination.appendingPathComponent("diary-report-full.png"))
+                       size: NSSize(width: 900, height: 2400), to: destination.appendingPathComponent("diary-report-full.png"))
             try render(DiaryReportView(report: builder.build(windows: [], day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 900), to: destination.appendingPathComponent("diary-report-empty.png"))
             let model = DiaryReportCoordinator(defaults: SettingsSnapshotDefaults())

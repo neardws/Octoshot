@@ -26,7 +26,13 @@ struct DiaryReportView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     Text("我是东太平洋红章鱼一酱 · Octopus rubescens")
                         .font(.callout).foregroundStyle(.secondary)
-                    Text("今天八只手都干了啥").font(.title2.bold())
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("今天在干嘛").font(.title2.bold())
+                        Text(report.overviewLine).textSelection(.enabled)
+                        Text(report.focusPattern.summaryLine).font(.callout).foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
                     if report.timeline.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("今天还没有记录").font(.title3.bold())
@@ -34,6 +40,23 @@ struct DiaryReportView: View {
                                 .foregroundStyle(.secondary)
                         }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    if !report.appInsights.isEmpty {
+                        Text("各 App 都干了啥").font(.title2.bold())
+                        ForEach(report.appInsights, id: \.appBundleID) { insight in
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(insight.appName).font(.title3.bold())
+                                    Spacer()
+                                    Text("记录用时 " + DiaryReportText.duration(insight.totalDuration))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                ForEach(Array(insight.bullets.enumerated()), id: \.offset) { _, bullet in
+                                    Text("• " + bullet).textSelection(.enabled)
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Text("时间线").font(.title2.bold())
                     }
                     ForEach(Array(report.timeline.enumerated()), id: \.offset) { _, segment in
                         VStack(alignment: .leading, spacing: 10) {
@@ -45,14 +68,6 @@ struct DiaryReportView: View {
                             if let roast = segment.roast { callout(roast) }
                         }.frame(maxWidth: .infinity, alignment: .leading)
                         Divider()
-                    }
-                    Text("App 用时").font(.title2.bold())
-                    ForEach(report.appDurations.keys.sorted(), id: \.self) { app in
-                        HStack {
-                            Text(report.appNames[app] ?? app)
-                            Spacer()
-                            Text(DiaryReportText.duration(report.appDurations[app]!)).monospacedDigit()
-                        }
                     }
                     Text("一酱总结").font(.title2.bold())
                     if let roast = report.closingRoast { callout(roast) }

@@ -11,6 +11,9 @@ public struct DiaryDailyReport: Equatable {
     public let timeline: [Segment]
     public let appDurations: [String: TimeInterval]
     public let appNames: [String: String]
+    public let overviewLine: String
+    public let focusPattern: DiaryFocusPattern
+    public let appInsights: [DiaryAppInsight]
     public let closingRoast: String?
     public let generatedAt: Date
 }
@@ -18,18 +21,50 @@ public struct DiaryDailyReport: Equatable {
 public protocol DiaryRoastProvider {
     func roast(for window: DiaryWindowSkeleton) -> String?
     func closingRoast(for windows: [DiaryWindowSkeleton]) -> String?
+    func closingRoast(for windows: [DiaryWindowSkeleton], appInsights: [DiaryAppInsight],
+                      focusPattern: DiaryFocusPattern) -> String?
+}
+
+extension DiaryRoastProvider {
+    public func closingRoast(for windows: [DiaryWindowSkeleton], appInsights: [DiaryAppInsight],
+                             focusPattern: DiaryFocusPattern) -> String? {
+        closingRoast(for: windows)
+    }
 }
 
 public struct DiaryPlaceholderRoastProvider: DiaryRoastProvider {
     public init() {}
 
     public func roast(for window: DiaryWindowSkeleton) -> String? {
-        guard let entry = window.entries.first else { return nil }
-        return "\(entry.appName) 又分到 \(DiaryReportText.duration(entry.duration))，我八只手都替它鼓掌。"
+        guard let entry = window.entries.first(where: { DiaryInsightAnalyzer.detail($0) != nil })
+                ?? window.entries.first else { return nil }
+        guard let detail = DiaryInsightAnalyzer.detail(entry) else {
+            return "只记下了 \(entry.appName)，文字没跟上，八只手也不敢编剧情。"
+        }
+        let endings = ["八只手先记下，进展可不靠开着窗口证明。",
+                       "八只手负责记账，不负责把打开算成搞定。",
+                       "八只手不加戏，标题再忙也不自带完成章。"]
+        let ending = endings[Int(DiaryTextFingerprint.fingerprint(detail) % UInt64(endings.count))]
+        return "\(entry.appName) 里有「\(detail)」，\(ending)"
     }
 
     public func closingRoast(for windows: [DiaryWindowSkeleton]) -> String? {
-        windows.isEmpty ? "今天没有留下记录，八只手难得一起放假。" : "今天的 App 用时已经记好，八只手也没替你多算一秒。"
+        let analysis = DiaryInsightAnalyzer.analyze(windows)
+        return closingRoast(for: windows, appInsights: analysis.appInsights, focusPattern: analysis.focusPattern)
+    }
+
+    public func closingRoast(for windows: [DiaryWindowSkeleton], appInsights: [DiaryAppInsight],
+                             focusPattern: DiaryFocusPattern) -> String? {
+        let entries = DiaryInsightAnalyzer.rankedEntries(windows.flatMap(\.entries).filter {
+            $0.appBundleID == appInsights.first?.appBundleID
+        })
+        guard let entry = entries.first(where: { DiaryInsightAnalyzer.detail($0) != nil }) ?? entries.first else {
+            return "今天没有留下文字记录，八只手难得一起放假。"
+        }
+        let topic = String((DiaryInsightAnalyzer.detail(entry) ?? entry.appName).prefix(18))
+        return focusPattern.switchCount > 0
+            ? "「\(topic)」记下了；条目间换了 \(focusPattern.switchCount) 次 App，八只手忙着翻页，不替进展盖章。"
+            : "「\(topic)」记下了；条目没换 App，八只手不把挂着窗口算成战绩。"
     }
 }
 
@@ -55,10 +90,14 @@ public struct DiaryReportBuilder {
             for (app, duration) in window.appDurations { totals[app, default: 0] += duration }
             for entry in window.entries where names[entry.appBundleID] == nil { names[entry.appBundleID] = entry.appName }
         }
+        let analysis = DiaryInsightAnalyzer.analyze(ordered)
         return DiaryDailyReport(day: start, calendar: calendar,
                                 timeline: ordered.map { .init(skeleton: $0, roast: roastProvider?.roast(for: $0)) },
                                 appDurations: totals, appNames: names,
-                                closingRoast: roastProvider?.closingRoast(for: ordered), generatedAt: clock())
+                                overviewLine: analysis.overviewLine, focusPattern: analysis.focusPattern,
+                                appInsights: analysis.appInsights,
+                                closingRoast: roastProvider?.closingRoast(for: ordered, appInsights: analysis.appInsights,
+                                                                         focusPattern: analysis.focusPattern), generatedAt: clock())
     }
 }
 
