@@ -41,8 +41,25 @@ public enum EmbeddedModelID: String, CaseIterable, Codable, Sendable {
     public var primaryGGUFFileName: String? {
         switch self {
         case .smolVLM2_500M_4bit: return nil
-        case .pix2texMFR_Q4: return "pix2tex-mfr-Q4_K.gguf"
+        case .pix2texMFR_Q4: return "pix2tex-mfr-q4_k.gguf"
         }
+    }
+
+    public var legacyGGUFFileNames: [String] {
+        switch self {
+        case .smolVLM2_500M_4bit: return []
+        case .pix2texMFR_Q4: return ["pix2tex-mfr-Q4_K.gguf"]
+        }
+    }
+
+    public func resolvedLocalGGUFURL(in directory: URL) -> URL? {
+        guard let primaryGGUFFileName,
+              let fileNames = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
+            return nil
+        }
+        return ([primaryGGUFFileName] + legacyGGUFFileNames)
+            .first(where: { fileNames.contains($0) })
+            .map { directory.appendingPathComponent($0) }
     }
 }
 
@@ -63,10 +80,13 @@ public enum EmbeddedAIModelPaths {
     }
 
     public static func isInstalled(_ model: EmbeddedModelID) -> Bool {
-        let dir = directory(for: model)
+        isInstalled(model, in: directory(for: model))
+    }
+
+    public static func isInstalled(_ model: EmbeddedModelID, in dir: URL) -> Bool {
         guard FileManager.default.fileExists(atPath: dir.path) else { return false }
-        if let gguf = model.primaryGGUFFileName {
-            return FileManager.default.fileExists(atPath: dir.appendingPathComponent(gguf).path)
+        if model.primaryGGUFFileName != nil {
+            return model.resolvedLocalGGUFURL(in: dir) != nil
         }
         let config = dir.appendingPathComponent("config.json")
         return FileManager.default.fileExists(atPath: config.path)
