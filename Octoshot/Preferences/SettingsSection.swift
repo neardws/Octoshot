@@ -7,6 +7,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case recording
     case annotation
     case ai
+    case diary
     case developer
     case about
 
@@ -20,6 +21,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .recording: return OctoshotL10n.text("Recording")
         case .annotation: return OctoshotL10n.text("Annotation")
         case .ai: return OctoshotL10n.text("AI")
+        case .diary: return OctoshotL10n.text("Yijiang Diary")
         case .developer: return OctoshotL10n.text("Developer")
         case .about: return OctoshotL10n.text("About")
         }
@@ -33,6 +35,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .recording: return "record.circle"
         case .annotation: return "pencil.and.outline"
         case .ai: return "brain"
+        case .diary: return "book.closed"
         case .developer: return "hammer"
         case .about: return "info.circle"
         }
@@ -46,6 +49,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .recording: return OctoshotL10n.text("Video, GIF, scroll capture, and mode bar")
         case .annotation: return OctoshotL10n.text("Redaction and annotate defaults")
         case .ai: return OctoshotL10n.text("Embedded SmolVLM2, pix2tex, optional Ollama")
+        case .diary: return OctoshotL10n.text("A local diary, with eight helping hands")
         case .developer: return OctoshotL10n.text("Dev tools and Agent CLI")
         case .about: return OctoshotL10n.text("Version and license")
         }

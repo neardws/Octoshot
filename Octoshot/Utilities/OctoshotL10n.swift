@@ -4,7 +4,8 @@ import OctoshotCore
 enum OctoshotL10n {
     static var isSettingsSnapshot: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_SETTINGS"] == "1"
+        (ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_SETTINGS"] == "1"
+            || ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_DIARY"] == "1")
             && ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_DIR"] != nil
         #else
         false
@@ -13,7 +14,8 @@ enum OctoshotL10n {
 
     static var snapshotLocale: Locale {
         #if DEBUG
-        Locale(identifier: ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_LOCALE"] ?? "en")
+        Locale(identifier: ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_LOCALE"]
+               ?? (ProcessInfo.processInfo.environment["OCTOSHOT_QA_SNAPSHOT_DIARY"] == "1" ? "zh-Hans" : "en"))
         #else
         .current
         #endif
