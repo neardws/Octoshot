@@ -2,6 +2,16 @@ import XCTest
 @testable import OctoshotCore
 
 final class URLSchemeGateTests: XCTestCase {
+    func testDiaryNeverUsesCaptureConsentEvenWhenAutomationIsOff() {
+        for action in ["today", "show", "timeline", "export", "status", "pause", "resume", "purge"] {
+            let kind = URLSchemeGate.classify(URL(string: "octoshot://diary?action=\(action)")!)
+            XCTAssertEqual(kind, .diary)
+            XCTAssertNotEqual(kind, .silentCapture)
+            for policy in URLSchemeAutomationPolicy.allCases {
+                XCTAssertEqual(URLSchemeGate.decision(for: kind, policy: policy, callerIsTrusted: false), .run)
+            }
+        }
+    }
     func testBrowserNeverGetsAlwaysAllowEvenWithValidSignature() {
         XCTAssertFalse(URLSchemeGate.canAlwaysAllow(identity: "browser", requirement: "signed", isBrowser: true))
         XCTAssertFalse(URLSchemeGate.isTrusted(identity: "browser", requirement: "signed", isBrowser: true,

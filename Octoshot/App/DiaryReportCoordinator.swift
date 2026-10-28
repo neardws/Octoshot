@@ -91,4 +91,14 @@ final class DiaryReportCoordinator: ObservableObject {
             }
         }
     }
+
+    func handleAgentURL(_ url: URL) {
+        let service = DiaryAgentService(store: { try DiaryStore() }, loadSettings: { self.settings },
+            saveSettings: { settings in
+                try settings.save(to: self.defaults)
+                self.settings = settings
+            })
+        do { try DiaryAgentMailbox().serve(url, using: service) }
+        catch { NSLog("Octoshot diary IPC: %@", error.localizedDescription) }
+    }
 }
