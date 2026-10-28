@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class DiaryOllamaTests: XCTestCase {
-    private let good = "「日报布局」，窗口开着，可不算已经搞定。"
+    private let good = "在「日报布局」里来回挪方块，八只手都替你累。"
 
     private func window(_ offset: TimeInterval = 0) -> DiaryWindowSkeleton {
         let start = Date(timeIntervalSince1970: 1_700_000_000 + offset)
@@ -138,6 +138,8 @@ final class DiaryOllamaTests: XCTestCase {
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.map { $0["role"] as? String }, ["system", "user"])
         XCTAssertTrue((messages[0]["content"] as? String)?.contains("AX/OCR") == true)
+        XCTAssertTrue((messages[0]["content"] as? String)?.contains("自由句式") == true)
+        XCTAssertFalse((messages[0]["content"] as? String)?.contains("结尾格式") == true)
         XCTAssertTrue((messages[1]["content"] as? String)?.contains("骨架聚合") == true)
         XCTAssertEqual(messages[1]["images"] as? [String], [image.base64EncodedString()])
     }
@@ -199,6 +201,23 @@ final class DiaryOllamaTests: XCTestCase {
         XCTAssertEqual(roasts.roast(for: window()), good)
         XCTAssertEqual(roasts.roast(for: window(600)), DiaryPlaceholderRoastProvider().roast(for: window(600)))
         XCTAssertNotNil(service.lastFailureReason)
+    }
+
+    func testNearDuplicatesAcrossCallsAreScopedToReportDay() async {
+        var calls = 0
+        let client = DiaryOllamaClient(transport: { request in
+            guard request.url!.lastPathComponent == "chat" else { return try self.fixture(request) }
+            calls += 1
+            return try self.fixture(request, output: calls == 2
+                ? self.good.replacingOccurrences(of: "都", with: "也") : self.good)
+        })
+        let service = DiaryOllamaRoastService(defaults: defaults()) { client }
+        let first = await service.prepare(windows: [window()])
+        XCTAssertEqual(first.roast(for: window()), good)
+        let repeated = await service.prepare(windows: [window(600)])
+        XCTAssertEqual(repeated.roast(for: window(600)), DiaryPlaceholderRoastProvider().roast(for: window(600)))
+        let tomorrow = await service.prepare(windows: [window(86400)])
+        XCTAssertEqual(tomorrow.roast(for: window(86400)), good)
     }
 
     func testDailyBreakerPersistsAndResetsNextDay() async {
@@ -326,7 +345,7 @@ private final class DiaryOllamaMockProtocol: URLProtocol {
         switch request.url!.lastPathComponent {
         case "version": payload = ["version": "0.40.5"]
         case "tags": payload = ["models": [["name": DiaryOllamaConfiguration.defaultModel]]]
-        default: payload = ["message": ["content": "「日报布局」，窗口开着，可不算已经搞定。"]]
+        default: payload = ["message": ["content": "在「日报布局」里来回挪方块，八只手都替你累。"]]
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

@@ -10,7 +10,7 @@ final class DiaryMiniCPMTests: XCTestCase {
                                       textSnippets: ["骨架聚合"], urlHost: "example.com", duration: 600)])
     }
 
-    private let good = "「日报布局」，窗口开着，可不算已经搞定。"
+    private let good = "在「日报布局」里来回挪方块，八只手都替你累。"
 
     func testCatalogKeepsSmolDefaultAndMiniCPMOptional() {
         let model = EmbeddedModelID.miniCPMV46_4bit
@@ -34,10 +34,88 @@ final class DiaryMiniCPMTests: XCTestCase {
     }
 
     func testRejectsInventedChineseAndSkeletonRepetition() {
-        for output in ["今天你刷了三小时视频。", "「炒股亏钱」，窗口开着，可不算已经搞定。", "日报布局",
+        for output in ["今天你刷了三小时视频。", "「炒股亏钱」，窗口开着，可不算已经搞定。",
                        "「日报布局」，你已经完成上线了。", "你今天一点用都没有。"] {
             XCTAssertNil(DiaryRoastQualityGate.accept(output, for: window()))
         }
+    }
+
+    func testFreeFormAnchorsIncludeChineseFragmentsAndCaseInsensitiveEnglish() {
+        for output in [good, "布局还在眼前，八只手先歇会儿。", "骨架像拼图，八只手等着看。",
+                       "cursor像个舞台，窗口标题比演员还忙。", "CUR像个舞台，窗口标题比演员还忙。"] {
+            XCTAssertEqual(DiaryRoastQualityGate.accept(output, for: window()), output)
+        }
+        XCTAssertNil(DiaryRoastQualityGate.accept("八只手都替你累，窗口像个舞台。", for: window()))
+        XCTAssertNil(DiaryRoastQualityGate.accept("日和cu在跳舞，八只手都替你累。", for: window()))
+    }
+
+    func testThinkingAndKnownPrefixAreStrippedButFormattingIsRejected() {
+        XCTAssertEqual(DiaryRoastQualityGate.accept(" <think>私密\n思考</think> 吐槽：\(good) ", for: window()), good)
+        for output in ["<think>未结束\(good)", "解释：\(good)", "**\(good)**", "- \(good)",
+                       "_\(good)_", "吐槽：\n\(good)", "\(good)\u{2028}布局", "<b>\(good)</b>"] {
+            XCTAssertNil(DiaryRoastQualityGate.accept(output, for: window()), output)
+        }
+    }
+
+    func testRejectsInventedNumbersDurationsDomainsAndHandles() {
+        for output in ["日报布局折腾了42次，八只手都替你累。", "日报布局折腾三小时，八只手都替你累。",
+                       "日报布局磨到十二点半，八只手都替你累。", "日报布局去了evil.com，八只手都替你累。",
+                       "日报布局去了https://example.com/secret，真忙。", "日报布局交给@neil，八只手歇了。",
+                       "日报布局去了坏人.中国，真忙。", "日报布局去了https://example.com/秘密，真忙。"] {
+            XCTAssertNil(DiaryRoastQualityGate.accept(output, for: window()), output)
+        }
+        var grounded = window()
+        grounded.entries[0].textSnippets += ["42次 三小时 十二点半 @neil @neil_dev"]
+        for output in ["日报布局折腾了42次，八只手都替你累。", "日报布局磨了三小时，八只手都替你累。",
+                       "日报布局交给@neil，八只手歇了。", "日报布局交给@neil_dev，八只手歇了。",
+                       "example.com像本天书，八只手也得翻页。"] {
+            XCTAssertEqual(DiaryRoastQualityGate.accept(output, for: grounded), output)
+        }
+        XCTAssertNil(DiaryRoastQualityGate.accept("日报布局折腾了4次，八只手都替你累。", for: grounded))
+        let knownDomain = "日报布局旁边的example.com像本天书。"
+        XCTAssertEqual(DiaryRoastQualityGate.accept(knownDomain, for: grounded), knownDomain)
+    }
+
+    func testRecognizablePersonalNamesNeedSkeletonEvidence() {
+        for name in ["张三", "李四", "王老师"] {
+            let output = "日报布局，\(name)也得挠头。"
+            XCTAssertNil(DiaryRoastQualityGate.accept(output, for: window()))
+            var grounded = window()
+            grounded.entries[0].textSnippets += [name]
+            XCTAssertEqual(DiaryRoastQualityGate.accept(output, for: grounded), output)
+        }
+    }
+
+    func testRejectsInsultsEvenWhenGrounded() {
+        for insult in ["废物", "蠢", "垃圾", "傻", "白痴", "去死", "滚", "智障", "一点用都没有"] {
+            var grounded = window()
+            grounded.entries[0].textSnippets += [insult]
+            XCTAssertNil(DiaryRoastQualityGate.accept("日报布局里你真\(insult)。", for: grounded))
+        }
+    }
+
+    func testFortyCharacterBoundaryAndChineseMajority() {
+        let boundary = "日报布局" + String(repeating: "哎", count: 35) + "。"
+        XCTAssertEqual(DiaryRoastQualityGate.accept(boundary, for: window()), boundary)
+        XCTAssertNil(DiaryRoastQualityGate.accept(boundary + "哎", for: window()))
+        XCTAssertNil(DiaryRoastQualityGate.accept("Cursor makes this layout look very busy。", for: window()))
+    }
+
+    func testCompletionClaimsNeedCorrespondingSkeletonWords() {
+        for claim in ["已经搞定", "上线了", "修好了", "完成了", "已修复", "通过了"] {
+            let output = "日报布局\(claim)，八只手先记账。"
+            XCTAssertNil(DiaryRoastQualityGate.accept(output, for: window()), output)
+            var grounded = window()
+            grounded.entries[0].textSnippets += [claim]
+            XCTAssertEqual(DiaryRoastQualityGate.accept(output, for: grounded), output)
+        }
+    }
+
+    func testNearDuplicatesAndRuleCopiesAreRejected() {
+        XCTAssertNil(DiaryRoastQualityGate.accept(good, for: window(), previousRoasts: [good]))
+        XCTAssertNil(DiaryRoastQualityGate.accept(good.replacingOccurrences(of: "都", with: "也"),
+                                                for: window(), previousRoasts: [good]))
+        XCTAssertNil(DiaryRoastQualityGate.accept("Cursor 里有「日报布局」。", for: window()))
     }
 
     func testPromptContainsOnlySkeletonFactsAndCaps() {
@@ -46,6 +124,8 @@ final class DiaryMiniCPMTests: XCTestCase {
             XCTAssertTrue(prompt.contains(text), text)
         }
         XCTAssertFalse(prompt.contains("SmolVLM"))
+        XCTAssertTrue(prompt.contains("自由句式"))
+        XCTAssertFalse(prompt.contains("结尾只能"))
     }
 
     func testNoNewFactFromKeyframe() {

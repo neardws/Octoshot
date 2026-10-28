@@ -34,6 +34,14 @@ enum DiarySnapshotHarness {
                 windows += try aggregator.observe(nil, at: start.addingTimeInterval(600))
             }
             let builder = DiaryReportBuilder(calendar: calendar, clock: { day.addingTimeInterval(22 * 3600) })
+            let mockRoasts = ["在「日报布局」里来回挪方块，八只手都替你累。",
+                "焦点切换像接力赛，八只手也想申请替补。",
+                "文字优先挺好，日报布局可别抢了主角的戏。",
+                "Markdown的转义字符，比章鱼触手还爱打结。",
+                "骨架聚合像拼图，窗口标题也得排队认领位置。",
+                "空日报等着导出预览，八只手先替留白鼓掌。",
+                "固定时钟盯着聚合边界，时间也得按规矩排队。",
+                "验收记录还写着待确认，八只手可不替你签字。"]
             var chatIndex = 0
             let client = DiaryOllamaClient(transport: { request in
                 let payload: [String: Any]
@@ -41,16 +49,19 @@ enum DiarySnapshotHarness {
                 case "version": payload = ["version": "0.40.5"]
                 case "tags": payload = ["models": [["name": DiaryOllamaConfiguration.defaultModel]]]
                 default:
-                    let window = windows[chatIndex]
-                    let ending = DiaryRoastQualityGate.endings[chatIndex % DiaryRoastQualityGate.endings.count]
+                    let output = mockRoasts[chatIndex]
                     chatIndex += 1
-                    payload = ["message": ["content": "<think>离线示例</think>「\(window.entries[0].windowTitle.prefix(14))」，\(ending)。"]]
+                    payload = ["message": ["content": "<think>离线示例</think>\(output)"]]
                 }
                 return (try JSONSerialization.data(withJSONObject: payload),
                         HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             })
             let service = DiaryOllamaRoastService(defaults: SettingsSnapshotDefaults()) { client }
             let roast = await service.prepare(windows: windows)
+            guard chatIndex == windows.count,
+                  zip(windows, mockRoasts).allSatisfy({ roast.roast(for: $0.0) == $0.1 }) else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
             try render(DiaryReportView(report: builder.build(windows: windows, day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 2400), to: destination.appendingPathComponent("diary-report-full.png"))
             try render(DiaryReportView(report: builder.build(windows: [], day: day, roastProvider: roast)),
