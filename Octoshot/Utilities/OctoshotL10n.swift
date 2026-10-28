@@ -83,14 +83,14 @@ enum OctoshotL10n {
     static func modelName(_ model: EmbeddedModelID) -> String {
         switch model {
         case .smolVLM2_500M_4bit: text("SmolVLM2-500M (MLX 4-bit)")
-        case .pix2texMFR_Q4: model.displayName
+        case .pix2texMFR_Q4, .miniCPMV46_4bit: model.displayName
         }
     }
 
     static func modelLicense(_ model: EmbeddedModelID) -> String {
         switch model {
         case .smolVLM2_500M_4bit: text("Apache-2.0 (Hugging FaceTB / mlx-community weights)")
-        case .pix2texMFR_Q4: model.licenseNote
+        case .pix2texMFR_Q4, .miniCPMV46_4bit: model.licenseNote
         }
     }
 

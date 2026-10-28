@@ -27,12 +27,18 @@ final class DiaryReportCoordinator: ObservableObject {
     static let shared = DiaryReportCoordinator()
     @Published private(set) var settings: DiarySettings
     @Published private(set) var error: String?
+    var roastFailureReason: String? { DiaryOllamaRuntime.service.disabledReason }
+    @Published private(set) var buildingReport = false
+    @Published var roastEnabled: Bool {
+        didSet { defaults.set(roastEnabled, forKey: "diary.minicpm.enabled") }
+    }
     private let defaults: UserDefaults
     private var scheduling: Task<Void, Never>?
     private var reportWindow: DiaryReportWindowController?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        roastEnabled = defaults.bool(forKey: "diary.minicpm.enabled")
         do { settings = try DiarySettings.load(from: defaults) }
         catch { settings = DiarySettings(); self.error = OctoshotL10n.text("Could not load diary settings.") }
     }
@@ -64,17 +70,25 @@ final class DiaryReportCoordinator: ObservableObject {
     }
 
     func open(day: Date) {
-        do {
-            let database = DiaryStore.defaultDirectory.appendingPathComponent("diary.sqlite")
-            let windows = FileManager.default.fileExists(atPath: database.path) ? try DiaryStore().fetch(day: day) : []
-            let report = DiaryReportBuilder().build(windows: windows, day: day, roastProvider: DiaryPlaceholderRoastProvider())
-            reportWindow?.close()
-            reportWindow = DiaryReportWindowController(report: report)
-            reportWindow?.show()
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = OctoshotL10n.text("Could not read the diary. Your records have not been changed.")
-            alert.runModal()
+        guard !buildingReport else { return }
+        buildingReport = true
+        Task { @MainActor in
+            defer { buildingReport = false }
+            do {
+                let database = DiaryStore.defaultDirectory.appendingPathComponent("diary.sqlite")
+                let windows = FileManager.default.fileExists(atPath: database.path) ? try DiaryStore().fetch(day: day) : []
+                let roasts = roastEnabled
+                    ? await DiaryOllamaRuntime.service.prepare(windows: windows, keyFrame: DiaryOllamaRuntime.keyFrameData)
+                    : DiaryPreparedRoasts(lines: [])
+                let report = DiaryReportBuilder().build(windows: windows, day: day, roastProvider: roasts)
+                reportWindow?.close()
+                reportWindow = DiaryReportWindowController(report: report)
+                reportWindow?.show()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = OctoshotL10n.text("Could not read the diary. Your records have not been changed.")
+                alert.runModal()
+            }
         }
     }
 }

@@ -26,6 +26,8 @@ public enum MLXVLMLoader {
     /// Timeouts and cancellation are cooperative, not a GPU or process kill.
     @MainActor
     public final class Loader {
+        public init() {}
+
         #if EMBEDDED_MLX
         private var container: ModelContainer?
         private var loadedDirectory: URL?
@@ -35,7 +37,7 @@ public enum MLXVLMLoader {
         #endif
 
         public func respond(
-            prompt: String, image: NSImage, modelDirectory: URL,
+            prompt: String, image: NSImage?, modelDirectory: URL,
             maxTokens: Int = 256, timeout: TimeInterval? = 120,
             idleUnloadDelay: TimeInterval = 300
         ) async throws -> String {
@@ -113,6 +115,17 @@ public enum MLXVLMLoader {
             #endif
         }
 
+        public func unload(modelDirectory: URL) throws {
+            #if EMBEDDED_MLX
+            guard requestTask == nil else {
+                throw NSError(domain: "Octoshot.MLX", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "本地模型正在使用中，请稍后再删除。"
+                ])
+            }
+            if loadedDirectory == modelDirectory.standardizedFileURL { unload() }
+            #endif
+        }
+
         #if EMBEDDED_MLX
         private func scheduleIdleUnload(after seconds: TimeInterval) {
             guard container != nil else { return }
@@ -125,19 +138,19 @@ public enum MLXVLMLoader {
         }
 
         private func performRespond(
-            prompt: String, image: NSImage, modelDirectory: URL, maxTokens: Int
+            prompt: String, image: NSImage?, modelDirectory: URL, maxTokens: Int
         ) async throws -> String {
             try await ensureLoaded(modelDirectory: modelDirectory)
             try Task.checkCancellation()
             guard let container else { throw MLXVLMLoaderError.sessionUnavailable }
-            let imageURL = try writeTempPNG(image)
-            defer { try? FileManager.default.removeItem(at: imageURL) }
+            let imageURL = try image.map { try writeTempPNG($0) }
+            defer { if let imageURL { try? FileManager.default.removeItem(at: imageURL) } }
             let session = ChatSession(container, generateParameters: GenerateParameters(
                 maxTokens: maxTokens, temperature: 0.1))
             // repetitionPenalty crashes in mlx-swift-lm 2.31.3 VLM path
             // ([broadcast_shapes] (64) vs (prompt len)); rely on maxTokens instead.
             do {
-                let response = try await session.respond(to: prompt, image: .url(imageURL))
+                let response = try await session.respond(to: prompt, image: imageURL.map { .url($0) })
                 await session.clear()
                 try Task.checkCancellation()
                 return response

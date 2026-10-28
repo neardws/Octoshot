@@ -5,6 +5,26 @@ import OctoshotEmbeddedMLX
 final class MLXVLMLoaderTests: XCTestCase {
     #if EMBEDDED_MLX
     @MainActor
+    func testMiniCPMArchitectureBlockerWithoutWeights() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data(#"{"model_type":"minicpmv4_6"}"#.utf8).write(to: directory.appendingPathComponent("config.json"))
+        let loader = MLXVLMLoader.Loader()
+        defer { loader.unload() }
+        do {
+            _ = try await loader.respond(prompt: "只输出一句中文", image: nil, modelDirectory: directory,
+                                         maxTokens: 64, timeout: 30, idleUnloadDelay: 300)
+            XCTFail("Config-only fixture must not perform inference")
+        } catch {
+            if (error as NSError).domain == "Octoshot.MLX", (error as NSError).code == 4 {
+                throw XCTSkip("No Metal device; config-only architecture probe requires Metal")
+            }
+            XCTAssertEqual(error.localizedDescription, "Unsupported model type: minicpmv4_6")
+        }
+    }
+
+    @MainActor
     func testInvalidLimitsFailBeforeLoadingModel() async {
         let limits: [(Int, TimeInterval?, TimeInterval)] = [
             (0, 120, 300), (-1, 120, 300),

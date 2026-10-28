@@ -4,9 +4,9 @@ import OctoshotCore
 @main
 enum OctoshotMain {
     @MainActor
-    static func main() {
+    static func main() async {
         #if DEBUG
-        DiarySnapshotHarness.runIfRequested()
+        await DiarySnapshotHarness.runIfRequested()
         QuickAccessSnapshotHarness.runIfRequested()
         #endif
         OctoshotApp.main()
