@@ -2,6 +2,7 @@ import Foundation
 
 public struct DiarySettings: Codable, Equatable {
     public var enabled = false
+    public var pausedUntil: Date?
     public var windowInterval: TimeInterval = 600
     public var dwell: TimeInterval = 60
     public var retentionDays: Int? = 30
@@ -10,6 +11,10 @@ public struct DiarySettings: Codable, Equatable {
     public var userExcludedBundleIDs: Set<String> = []
 
     public init() {}
+
+    public func isPaused(at date: Date = Date()) -> Bool {
+        pausedUntil.map { $0 > date } ?? false
+    }
 
     public func save(to defaults: UserDefaults, key: String = "yijiangDiary.settings") throws {
         try validate()

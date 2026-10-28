@@ -60,7 +60,7 @@ actor MCPStdioServer {
             tool("annotate", "Apply JSON annotations", ["path": "string", "spec": "object", "output": "path"]),
             tool("record_start", "Start screen recording in Octoshot app (opens URL)", ["mode": "fullscreen|region", "format": "video|gif", "rect": "x,y,w,h"]),
             tool("record_stop", "Stop active Octoshot screen recording", [:])
-        ]
+        ] + DiaryMCPTools.definitions
     }
 
     private func tool(_ name: String, _ description: String, _ props: [String: String]) -> MCPJSONValue {
@@ -81,11 +81,11 @@ actor MCPStdioServer {
     private func handleToolCall(_ request: JSONRPCRequest) async -> JSONRPCResponse {
         guard let params = request.params,
               case .object(let dict) = params,
-              case .string(let name)? = dict["name"],
-              let args = dict["arguments"] else {
+              case .string(let name)? = dict["name"] else {
             return JSONRPCResponse(id: request.id, error: JSONRPCError(code: -32602, message: "Invalid tool call"))
         }
         do {
+            let args = dict["arguments"] ?? .object([:])
             let text = try await invokeTool(name: name, arguments: args)
             return JSONRPCResponse(
                 id: request.id,
@@ -96,11 +96,22 @@ actor MCPStdioServer {
                 ])
             )
         } catch {
+            if DiaryMCPTools.names.contains(name),
+               let text = try? DiaryAgentJSON.text(DiaryAgentError(error.localizedDescription)) {
+                return JSONRPCResponse(id: request.id, result: .object([
+                    "isError": .bool(true),
+                    "content": .array([.object(["type": .string("text"), "text": .string(text)])])
+                ]))
+            }
             return JSONRPCResponse(id: request.id, error: JSONRPCError(code: -32000, message: error.localizedDescription))
         }
     }
 
     private func invokeTool(name: String, arguments: MCPJSONValue) async throws -> String {
+        if DiaryMCPTools.names.contains(name) {
+            let request = try DiaryMCPTools.request(name: name, arguments: arguments)
+            return try await DiaryAgentClient.send(request).jsonText()
+        }
         guard case .object(let args) = arguments else { throw CaptureError.captureFailed("arguments must be object") }
         func str(_ key: String) -> String? {
             guard case .string(let v)? = args[key] else { return nil }

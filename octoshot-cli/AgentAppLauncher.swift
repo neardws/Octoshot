@@ -1,8 +1,20 @@
 import AppKit
 import Foundation
+import OctoshotCore
 
 enum AgentAppLauncher {
     private static let bundleID = "com.neardws.Octoshot"
+
+    @MainActor
+    static func openRunningDiaryURL(_ url: URL) async throws {
+        guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
+              let appURL = running.bundleURL else {
+            throw DiaryAgentError("Octoshot must already be running with diary enabled")
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        _ = try await NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration)
+    }
 
     static func openOctoshotURL(_ url: URL) throws {
         let workspace = NSWorkspace.shared

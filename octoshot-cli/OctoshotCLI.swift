@@ -23,6 +23,14 @@ struct OctoshotCLI {
         let rest = Array(args.dropFirst())
         do {
             switch command {
+            case "diary":
+                let options = try DiaryCLIArguments.parse(rest)
+                let response = try await DiaryAgentClient.send(options.request)
+                if !options.json, let markdown = response.markdown { print(markdown) }
+                else if !options.json, let status = response.status {
+                    print("Diary: \(status.enabled ? "enabled" : "disabled"); \(status.paused ? "paused until " + (status.pausedUntil ?? "unknown") : "not paused"); retention: \(status.retentionDays.map { "\($0) days" } ?? "forever"); report: \(status.dailyReportTime)")
+                }
+                else { print(try response.jsonText()) }
             case "capture":
                 try await runCapture(rest)
             case "list-windows":
@@ -53,6 +61,10 @@ struct OctoshotCLI {
                 exit(1)
             }
         } catch {
+            if command == "diary" {
+                print((try? DiaryAgentJSON.text(DiaryAgentError(error.localizedDescription))) ?? "")
+                exit(1)
+            }
             fputs("Error: \(error.localizedDescription)\n", stderr)
             exit(1)
         }
@@ -75,7 +87,17 @@ struct OctoshotCLI {
           annotate --input PATH --spec PATH.json [--output PATH]
           record start [--mode fullscreen|region] [--format video|gif] [--rect x,y,w,h]
           record stop
+          diary today [--json]
+          diary show <YYYY-MM-DD> [--json]
+          diary timeline --from <ISO8601> --to <ISO8601> [--json]
+          diary export [--date YYYY-MM-DD] --format md|json
+          diary pause <minutes>
+          diary resume
+          diary status [--json]
+          diary purge --confirm
           mcp   Start Model Context Protocol server on stdio
+
+        Live diary commands require Octoshot already running and diary enabled.
 
         Capture output uses the configured PNG/JPEG format. Extensionless paths get
         .png/.jpg; explicit extensions are preserved, but encoding uses the configured format.

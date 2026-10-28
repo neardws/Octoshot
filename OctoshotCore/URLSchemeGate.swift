@@ -40,6 +40,7 @@ public enum URLSchemeGate {
         case silentCapture
         /// Ends a recording. Always allowed, so a recording can never get stuck on.
         case stopRecording
+        case diary
         case unsupported
     }
 
@@ -57,6 +58,8 @@ public enum URLSchemeGate {
         }
 
         switch url.host?.lowercased() {
+        case "diary":
+            return .diary
         case "capture":
             switch value("mode") ?? "fullscreen" {
             case "area", "region", "window": return .interactive
@@ -89,7 +92,7 @@ public enum URLSchemeGate {
         switch kind {
         case .unsupported:
             return .refuse
-        case .stopRecording:
+        case .stopRecording, .diary:
             return .run
         case .interactive:
             return policy == .off ? .refuse : .run

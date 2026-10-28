@@ -68,6 +68,10 @@ enum AgentURLRouter {
     /// in Settings → Developer (ask by default).
     static func handle(_ url: URL, caller: URLSchemeCaller?) {
         let kind = URLSchemeGate.classify(url)
+        if kind == .diary {
+            DiaryReportCoordinator.shared.handleAgentURL(url)
+            return
+        }
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         var displayID = ScreenCaptureService.displayID(at: NSEvent.mouseLocation)
         if url.host?.lowercased() == "record", kind != .stopRecording,
