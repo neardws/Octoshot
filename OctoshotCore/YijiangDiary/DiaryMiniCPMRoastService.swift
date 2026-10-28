@@ -68,7 +68,8 @@ public final class DiaryMiniCPMRoastService {
     private var tail: Task<DiaryPreparedRoasts, Never>?
     private var queueID = UUID()
     var callTimeout = DiaryMiniCPMRoastService.timeout
-    private let stateKey = "diary.minicpm.failureState"
+    private let stateKey: String
+    private let rejectRepeated: Bool
 
     private struct FailureState: Codable {
         var day: Date
@@ -79,13 +80,18 @@ public final class DiaryMiniCPMRoastService {
     public init(defaults: UserDefaults = .standard, calendar: Calendar = .current,
                 clock: @escaping () -> Date = Date.init,
                 installed: @escaping () -> Bool = { EmbeddedAIModelPaths.isInstalled(.miniCPMV46_4bit) },
+                stateKey: String = "diary.minicpm.failureState", rejectRepeated: Bool = false,
                 backend: @escaping Backend) {
         self.defaults = defaults
         self.calendar = calendar
         self.clock = clock
         self.installed = installed
         self.backend = backend
+        self.stateKey = stateKey
+        self.rejectRepeated = rejectRepeated
     }
+
+    public var lastFailureReason: String? { currentState().reason }
 
     public var disabledReason: String? {
         let state = currentState()
@@ -104,7 +110,8 @@ public final class DiaryMiniCPMRoastService {
                 do {
                     let output = try await infer(prompt: DiaryRoastQualityGate.prompt(for: window), image: keyFrame(window))
                     try Task.checkCancellation()
-                    if let line = DiaryRoastQualityGate.accept(output, for: window) {
+                    if let line = DiaryRoastQualityGate.accept(output, for: window),
+                       !rejectRepeated || !lines.contains(where: { $0.1 == line }) {
                         lines.append((window, line))
                         save(FailureState(day: calendar.startOfDay(for: clock()), count: 0))
                     } else { recordFailure("输出未通过中文、长度或事实约束校验") }

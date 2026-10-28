@@ -1,51 +1,55 @@
-# 一酱日记 M1c QA — #118
+# 一酱日记 M1c QA — optional local Ollama / #118
 
-## Status / merge gate
+## Status and scope
 
-This draft implements optional model management, the bounded native MLX call path,
-grounded per-window roast preparation, daily failure fallback, and offscreen UI QA.
-**M1c is not fully accepted:** the resolved `mlx-swift-lm` 2.31.3 registry lacks
-MiniCPM's `minicpmv4_6` architecture. The config-only loader test reproduces
-`Unsupported model type: minicpmv4_6`, before any weights/tokenizer load. A native
-model/processor implementation or a separately approved runtime is still required.
-Do not merge until that blocker is resolved and Neil reviews the offscreen previews.
-No real MiniCPM weights were downloaded; no live inference, peak-memory, or latency
-claim is made. The ≤3GB peak / ≤3s hot-latency acceptance checks remain pending.
+PR #119 **stays draft**. Do not merge, mark ready, or release. Neil must review the
+offscreen previews. This change replaces the unusable diary MLX MiniCPM-V-4.6 path
+with an optional user-managed local Ollama HTTP client. It does not prove real-model
+performance or acceptance: no Ollama installation/start, model pull, live inference,
+TCC authorization, capture, or LaunchAgent is part of this QA.
 
-## Behavior and deliberate limits
+## Runtime contract
 
-- Diary opt-in does not require a model download. Settings offers text-only or
-  MiniCPM (~2.2GB); the runtime limitation is visible before download. Existing
-  users may opt in later. SmolVLM2's Ask AI defaults/caps are unchanged.
-- Downloads use HF's paginated runtime-file listing, size checks, streamed SHA256
-  for LFS files, a 512MiB free-space reserve, atomic per-file promotion and a final
-  verified manifest. Resume skips verified complete files; partial files restart.
-  Progress labels distinguish current-file bytes from overall verified-file progress.
-- Prompts use bounded AX/OCR skeleton fields only. Optional already-existing local
-  frames are restricted to `Diary/frames`, ≤8MiB, then downsampled to ≤448px; no
-  capture API is called. Missing/deleted frames simply use text-only input.
-- For enforceable grounding, the model must choose a verbatim skeleton anchor
-  (≤14 characters) plus one of three non-factual snark endings. The gate only accepts
-  that exact single Chinese-dominant sentence, ≤40 characters. This intentionally
-  trades creative variety for auditable no-new-facts behavior; it is not a claim
-  that regex can detect arbitrary hallucinations. Bad, repeated, English, insulting
-  free-form, long, or invented output is dropped rather than rewritten.
-- A serial service prepares `DiaryRoastProvider` values for the synchronous report
-  builder. Text-only is the production fallback; the original placeholder provider
-  remains available. Closing roast is deliberately nil, with no empty UI section.
-- Every inference gets a fresh session, 64-token cap, shared loader's 256MiB GPU
-  cache cap, 30s deadline and 300s idle unload. Reusing the loader's one-request guard
-  avoids retaining separate Ask AI/diary model containers. Deletion does not cancel
-  an active Ask AI call. Timeouts are cooperative: cancellation waits for the backend
-  to unwind before another call; this is not a hard process/GPU kill or RSS bound.
-- Three consecutive load/deadline/quality failures disable roasts for the local
-  calendar day, persisted across app restarts. Success resets the counter; the next
-  local day resets it. Settings explains the failure, and skeleton reports still build.
+- Default model: `openbmb/minicpm-v4.7:1b`, approximately 1.8GB Q4_K_M. Never default
+  to `latest` (22GB 35B-A3B). Users may override the exact model/tag in Settings.
+- Require Ollama ≥ `0.40.5` before chat; earlier releases lack the `minicpmv4_7`
+  projector. Numeric semantic comparison handles suffixes: `0.40.5-rc1` is older
+  than stable `0.40.5`; `0.40.6-rc1` is newer; build metadata does not affect ordering.
+- `GET /api/version` then `GET /api/tags` distinguishes not-running, version-too-old
+  (with found version), model-missing, ready, and malformed/HTTP-error states. Model
+  matching is exact, including `:1b`; another tag is not silently selected.
+- UserDefaults: `diary.ollama.baseURL`, `diary.ollama.model`; default base address
+  `http://127.0.0.1:11434`. Only localhost/127.0.0.1/::1 HTTP(S) endpoints are accepted.
+  Default ephemeral URLSession rejects redirects. No cloud fallback or credentials.
+- `POST /api/chat`: `stream:false`, `think:false`, system constraints + bounded AX/OCR
+  user skeleton, optional `images:[base64]`, `num_predict:64`, `temperature:0.7`,
+  `keep_alive:"2m"`. HTTP timeout and per-window service deadline default to 30s.
+  Cancellation is cooperative, not a process kill; queue waits preserve serialization.
+  A single static chat queue covers settings tests and report clients. Status-only GET
+  probes may run independently; they never trigger inference.
+- Existing keyframes only: regular files directly under `Diary/frames`, no symlinks,
+  ≤8MiB, resized to ≤448px JPEG. Missing frames use text only; no capture API is called.
+- Facts only come from AX/OCR skeletons, never VLM output. After stripping complete
+  `<think>...</think>` blocks, accept only a verbatim ≤14-character skeleton anchor
+  plus an approved non-factual ending, one Chinese-dominant sentence ≤40 characters.
+  Unclosed thinking, English, repeated, long, insulting/free-form or fabricated output
+  is discarded. This conservative gate is not general hallucination detection.
+- Failed output uses the existing rule-based placeholder provider; skeleton facts,
+  durations, empty-day behavior and text/Markdown reporting are preserved. Rule-based
+  placeholders are not model output and retain their existing length/style. Closing
+  model roast stays nil. Three consecutive failures persist under
+  `diary.ollama.failureState`; success clears the counter, next local day resets it.
+- The existing `diary.minicpm.enabled` preference is intentionally retained so an
+  existing opt-in survives; new users default off. Failure state is separate from MLX.
+- Settings has Chinese translations and English fallback keys: status, address/model
+  fields, install/download link, copyable default pull command, recheck, and synthetic
+  “test one roast” (only ready, not busy, and not daily-disabled). No automatic pull.
+- Removed diary MLX download/progress/delete UI and MLX inference adapter. Legacy
+  catalog/download tests and architecture probe remain; SmolVLM2/Ask AI is unchanged.
 
-## Reproduce (offline fixtures; no TCC)
+## Reproduce — offline mocks, no TCC
 
-Run from this worktree. Reuse an already-cached Swift package checkout in
-`DerivedData/SourcePackages`; no Hugging Face access or model weights are needed.
+From this worktree, use the cached packages in `DerivedData/SourcePackages`:
 
 ```sh
 xcodegen generate
@@ -61,30 +65,49 @@ mkdir -p "$PWD/build/diary-qa/previews"
 OCTOSHOT_QA_SNAPSHOT_DIR="$PWD/build/diary-qa/previews" \
 OCTOSHOT_QA_SNAPSHOT_DIARY=1 OCTOSHOT_QA_SNAPSHOT_LOCALE=zh-Hans \
   "$PWD/DerivedData/Build/Products/Debug/Octoshot.app/Contents/MacOS/Octoshot"
+COPYFILE_DISABLE=1 /usr/bin/zip -j /tmp/m1c-ollama-preview.zip \
+  build/diary-qa/previews/settings-ollama-*.png \
+  build/diary-qa/previews/diary-report-{full,empty,fallback}.png
+git diff --check
 ```
 
-For focused tests, add `-only-testing:OctoshotCoreTests/DiaryMiniCPMTests`,
-`-only-testing:OctoshotCoreTests/YijiangDiaryReportTests`, and
-`-only-testing:OctoshotCoreTests/MLXVLMLoaderTests` to the test command.
-The config-only architecture-blocker test deliberately records the current missing
-implementation; replace that expectation when adding real MiniCPM support.
+When replacing an existing zip, remove that exact archive first to avoid retaining
+stale members. The harness exits before normal App lifecycle, notification requests,
+AX/ScreenCaptureKit and Keychain reads. It renders synthetic SwiftUI views with an
+offscreen NSHostingView, never captures the desktop. All HTTP uses an injected fake
+transport, including full-report chat output and connection-failure fallback. Preview
+settings suppress rechecks and mutation, use isolated coordinator defaults, and do not
+persist opt-in. The test suite also exercises URLSession with a mock URLProtocol.
+
+## Preview manifest
+
+Output directory: `build/diary-qa/previews/`; archive: `/tmp/m1c-ollama-preview.zip`.
+
+- `settings-ollama-not-running.png`
+- `settings-ollama-version-too-old.png`
+- `settings-ollama-model-missing.png`
+- `settings-ollama-ready.png`
+- `settings-ollama-disabled.png`
+- `diary-report-full.png` — mock `/api/chat` output through real quality gate
+- `diary-report-empty.png`
+- `diary-report-fallback.png` — mock connection failures, daily breaker, rule roasts
+
+Neil: check state wording, fixed `:1b` pull command, red AppIcon, per-window
+facts vs. roast bubbles, empty-day copy, and daily-disable explanation.
 
 ## Verification receipt — 2026-10-28
 
-- XcodeGen and dependency-backed Debug app build passed (`EMBEDDED_MLX` enabled).
-- Core XCTest suite: 234 executed, 232 passed, 2 skipped, 0 failures. Includes 23 new
-  offline MiniCPM tests and the new config-only architecture rejection probe.
-- An earlier full run caught missing localization wrappers in the new pane; fixed
-  with English keys / Simplified Chinese translations, then the full suite passed.
-- Harness exits before the normal App lifecycle, notification scheduling, recording,
-  AX access, or Keychain reads. It renders synthetic SwiftUI content using offscreen
-  view bitmap caching, not ScreenCaptureKit or desktop screenshots.
-- PNGs are in `build/diary-qa/previews/`, copied to
-  `/Users/neardws/octoshot-wt/diary-m1c-preview/`: `settings-diary.png`,
-  `settings-diary-progress.png`, `settings-diary-installed.png`,
-  `diary-report-full.png`, `diary-report-empty.png`. Settings variants are synthetic;
-  report bubbles use synthetic model-style strings passed through the real gate.
-- Neil: review the red AppIcon, tone, per-window facts/bubbles, text-only empty state,
-  download/progress/delete controls, runtime warning and daily-disable explanation.
-  Interactive downloads, deletion, enabling notifications and real model performance
-  have not been exercised. Logs/previews/DerivedData are ignored, not committed.
+- Full local Core XCTest suite: 256 executed, 254 passed, 2 skipped, 0 failures;
+  includes 22 new `DiaryOllamaTests`, all passing. Skips are existing case-sensitive
+  filesystem and opt-in GPU tests, not Ollama tests.
+- Dependency-backed Debug `Octoshot` build (`EMBEDDED_MLX` enabled): passed.
+- Offscreen harness: exit 0; all eight PNGs visually checked (four availability states,
+  daily-disable reason, full mock report, empty day and fallback report).
+- `git diff --check`: clean before commit.
+
+GitHub CI results and final tip are recorded in
+`/tmp/codex-m1c-ollama-result.md` and PR #119. Local logs live in
+`build/diary-qa/ollama-tests.log` and `build/diary-qa/ollama-build.log` (ignored).
+Real model memory, latency, real-output quality and interactive installation/pull
+remain deliberately untested. A successful build or mock preview is not live-model
+acceptance; keep the PR draft until separately reviewed.

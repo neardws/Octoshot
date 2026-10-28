@@ -5,7 +5,7 @@ import OctoshotCore
 
 @MainActor
 enum DiarySnapshotHarness {
-    static func runIfRequested() {
+    static func runIfRequested() async {
         let environment = ProcessInfo.processInfo.environment
         guard environment["OCTOSHOT_QA_SNAPSHOT_DIARY"] == "1",
               let directory = environment["OCTOSHOT_QA_SNAPSHOT_DIR"] else { return }
@@ -34,24 +34,42 @@ enum DiarySnapshotHarness {
                 windows += try aggregator.observe(nil, at: start.addingTimeInterval(600))
             }
             let builder = DiaryReportBuilder(calendar: calendar, clock: { day.addingTimeInterval(22 * 3600) })
-            let roast = DiaryPreparedRoasts(lines: windows.enumerated().compactMap { index, window in
-                let ending = DiaryRoastQualityGate.endings[index % DiaryRoastQualityGate.endings.count]
-                let synthetic = "「\(window.entries[0].windowTitle.prefix(14))」，\(ending)。"
-                return DiaryRoastQualityGate.accept(synthetic, for: window).map { (window, $0) }
+            var chatIndex = 0
+            let client = DiaryOllamaClient(transport: { request in
+                let payload: [String: Any]
+                switch request.url!.lastPathComponent {
+                case "version": payload = ["version": "0.40.5"]
+                case "tags": payload = ["models": [["name": DiaryOllamaConfiguration.defaultModel]]]
+                default:
+                    let window = windows[chatIndex]
+                    let ending = DiaryRoastQualityGate.endings[chatIndex % DiaryRoastQualityGate.endings.count]
+                    chatIndex += 1
+                    payload = ["message": ["content": "<think>离线示例</think>「\(window.entries[0].windowTitle.prefix(14))」，\(ending)。"]]
+                }
+                return (try JSONSerialization.data(withJSONObject: payload),
+                        HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             })
+            let service = DiaryOllamaRoastService(defaults: SettingsSnapshotDefaults()) { client }
+            let roast = await service.prepare(windows: windows)
             try render(DiaryReportView(report: builder.build(windows: windows, day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 2400), to: destination.appendingPathComponent("diary-report-full.png"))
             try render(DiaryReportView(report: builder.build(windows: [], day: day, roastProvider: roast)),
                        size: NSSize(width: 900, height: 900), to: destination.appendingPathComponent("diary-report-empty.png"))
             let model = DiaryReportCoordinator(defaults: SettingsSnapshotDefaults())
-            try render(SettingsDiaryPane(model: model, preview: .init()), size: NSSize(width: 780, height: 950),
-                       to: destination.appendingPathComponent("settings-diary.png"))
-            try render(SettingsDiaryPane(model: model, preview: .init(downloading: true, fraction: 0.42,
-                status: "离线演示：下载 model.safetensors · 924 / 2200 MB（当前文件）")),
-                size: NSSize(width: 780, height: 950), to: destination.appendingPathComponent("settings-diary-progress.png"))
-            try render(SettingsDiaryPane(model: model, preview: .init(installed: true,
-                status: "离线演示：已校验模型文件", failureReason: "今天已停用 MiniCPM 吐槽：连续三次超时；明天自动重试，文字日记不受影响。")),
-                size: NSSize(width: 780, height: 950), to: destination.appendingPathComponent("settings-diary-installed.png"))
+            let statuses: [(String, DiaryOllamaStatus)] = [("not-running", .notRunning),
+                ("version-too-old", .versionTooOld(found: "0.39.0")), ("model-missing", .modelMissing), ("ready", .ready)]
+            for (name, status) in statuses {
+                try render(SettingsDiaryPane(model: model, preview: .init(status: status)), size: NSSize(width: 820, height: 1100),
+                           to: destination.appendingPathComponent("settings-ollama-\(name).png"))
+            }
+            let failedClient = DiaryOllamaClient(transport: { _ in throw URLError(.cannotConnectToHost) })
+            let failedService = DiaryOllamaRoastService(defaults: SettingsSnapshotDefaults()) { failedClient }
+            let fallback = await failedService.prepare(windows: windows)
+            try render(DiaryReportView(report: builder.build(windows: windows, day: day, roastProvider: fallback)),
+                       size: NSSize(width: 900, height: 2400), to: destination.appendingPathComponent("diary-report-fallback.png"))
+            try render(SettingsDiaryPane(model: model, preview: .init(status: .notRunning,
+                failureReason: failedService.disabledReason)), size: NSSize(width: 820, height: 1100),
+                       to: destination.appendingPathComponent("settings-ollama-disabled.png"))
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("Diary snapshot failed: \(error)\n".utf8))

@@ -27,7 +27,7 @@ final class DiaryReportCoordinator: ObservableObject {
     static let shared = DiaryReportCoordinator()
     @Published private(set) var settings: DiarySettings
     @Published private(set) var error: String?
-    var roastFailureReason: String? { DiaryMiniCPMRuntime.service.disabledReason }
+    var roastFailureReason: String? { DiaryOllamaRuntime.service.disabledReason }
     @Published private(set) var buildingReport = false
     @Published var roastEnabled: Bool {
         didSet { defaults.set(roastEnabled, forKey: "diary.minicpm.enabled") }
@@ -78,7 +78,7 @@ final class DiaryReportCoordinator: ObservableObject {
                 let database = DiaryStore.defaultDirectory.appendingPathComponent("diary.sqlite")
                 let windows = FileManager.default.fileExists(atPath: database.path) ? try DiaryStore().fetch(day: day) : []
                 let roasts = roastEnabled
-                    ? await DiaryMiniCPMRuntime.service.prepare(windows: windows, keyFrame: DiaryMiniCPMRuntime.keyFrameData)
+                    ? await DiaryOllamaRuntime.service.prepare(windows: windows, keyFrame: DiaryOllamaRuntime.keyFrameData)
                     : DiaryPreparedRoasts(lines: [])
                 let report = DiaryReportBuilder().build(windows: windows, day: day, roastProvider: roasts)
                 reportWindow?.close()

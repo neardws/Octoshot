@@ -6,25 +6,36 @@
 |------|----------------|----------------|
 | Light VLM | `mlx-community/SmolVLM2-500M-Video-Instruct-mlx-4bit` | `~/Library/Application Support/Octoshot/Models/smolVLM2_500M_4bit/` |
 | LaTeX specialist | `cstr/pix2tex-mfr-gguf` (`pix2tex-mfr-q4_k.gguf`) | `~/Library/Application Support/Octoshot/Models/pix2texMFR_Q4/` |
-| Optional diary roast only | `mlx-community/MiniCPM-V-4.6-4bit` (~2.2GB, Apache-2.0) | `~/Library/Application Support/Octoshot/Models/miniCPMV46_4bit/` |
+| Optional diary roast only (external local Ollama) | `openbmb/minicpm-v4.7:1b` (~1.8GB Q4_K_M) | Managed by the user's Ollama, not Octoshot |
 
 Weights are **never** bundled in the app; use **Settings → AI** or onboarding to download.
 
-MiniCPM is managed separately in **Settings → 一酱日记**. It is opt-in, not bundled,
-and never replaces SmolVLM2 for Ask AI. Diary roasts never fall back to SmolVLM2.
-The downloader resumes verified whole files, checks HF LFS SHA256 when provided,
-checks free space with a 512MiB reserve, and marks installation complete only after
-all runtime files are verified. An interrupted file is restarted, not byte-range resumed.
+MiniCPM diary roasts now use **optional local Ollama ≥ 0.40.5**, not Swift MLX.
+In **Settings → 一酱日记**, the user installs/runs Ollama themselves and executes
+`ollama pull openbmb/minicpm-v4.7:1b`. Do not use `latest` (22GB, 35B-A3B).
+Octoshot never installs/starts Ollama, pulls its models, bundles GGUF, or sets up
+LaunchAgents. The model name and loopback address are configurable in UserDefaults;
+defaults are `openbmb/minicpm-v4.7:1b` and `http://127.0.0.1:11434`.
+Non-loopback addresses and HTTP redirects are rejected so diary inputs stay local.
+Settings checks version/model availability, offers the download-page link and copy
+command, and tests one synthetic skeleton without accessing the screen.
 
-**M1c runtime blocker:** the resolved `mlx-swift-lm` 2.31.3 VLM registry does not
-implement `minicpmv4_6`. A config-only offline test reproduces
-`Unsupported model type: minicpmv4_6` without downloading weights. The native
-adapter and fail-closed UI are wired, but real MiniCPM inference is **not working
-or accepted yet**. Settings shows this limitation before a user downloads anything.
-The diary adapter requests 64 tokens, fresh sessions, a 256MiB GPU buffer cache,
-30s cooperative cancellation, serial calls and five-minute idle unload. The cache
-limit is not a total-memory limit; ≤3GB peak and ≤3s hot latency remain unmeasured.
-See [M1c QA](yijiang-diary-m1c-qa.md) before reviewing or merging.
+Roasts remain opt-in (off for new users; existing opt-in is preserved). Chat requests
+use `stream:false`, `think:false`, 64 predicted tokens, temperature 0.7, `keep_alive:"2m"`,
+and a 30-second deadline. Inference is serialized across clients. Only bounded AX/OCR
+skeletons supply facts; optional existing keyframes are resized to 448px and sent as
+base64 JPEG. Thinking blocks are stripped before the existing strict Chinese/length/
+grounding gate; repeated output within a report is rejected. Failures return rule-based
+placeholders without changing report facts. Three consecutive failures disable model
+roasts for the local calendar day, persisting across restarts; tomorrow resets the breaker.
+Ollama manages model memory; `keep_alive` is a request, not an enforced memory bound.
+
+The old MLX MiniCPM download UI and diary MLX adapter are removed. Historical catalog,
+download helpers and architecture-probe tests remain for compatibility, **not as a
+supported inference route** (`minicpmv4_6` is still unsupported). SmolVLM2/Ask AI is
+unchanged, and is never used as a diary fallback. All current QA uses mocked HTTP;
+real inference, quality, peak memory and hot latency remain unmeasured.
+See [M1c QA](yijiang-diary-m1c-qa.md); PR #119 remains draft, not approved for merge.
 
 New pix2tex downloads use the canonical lowercase filename `pix2tex-mfr-q4_k.gguf`. The legacy `pix2tex-mfr-Q4_K.gguf` filename is still accepted locally without re-downloading; if both exist, the canonical lowercase file is preferred.
 
