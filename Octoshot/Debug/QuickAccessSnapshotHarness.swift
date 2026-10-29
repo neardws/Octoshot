@@ -32,7 +32,7 @@ enum QuickAccessSnapshotHarness {
                 exit(0)
             }
             let actions = QuickAccessActions(
-                onCopy: {}, onSave: {}, onAnnotate: {}, onPin: {}, onOCR: {}, onClose: {}
+                onCopy: { _ in }, onSave: { _ in }, onAnnotate: {}, onPin: {}, onOCR: {}, onClose: {}
             )
             let entries = [
                 QuickAccessEntry(image: try image(size: NSSize(width: 1600, height: 480), label: "WIDE"), actions: actions),

@@ -238,17 +238,22 @@ final class CaptureCoordinator {
         quickAccess.show(
             image: image,
             actions: QuickAccessActions(
-            onCopy: {
+            onCopy: { onSuccess in
                 if let file = savedFileURL {
                     NSWorkspace.shared.activateFileViewerSelecting([file])
+                    onSuccess()
                 } else {
-                    ImageExportActions.copy(image)
+                    ImageExportActions.perform {
+                        try await ImageFormats.copyToPasteboardAsync(image)
+                        onSuccess()
+                    }
                 }
             },
-            onSave: {
+            onSave: { onSuccess in
                 ImageExportActions.perform {
                     if let file = savedFileURL {
                         NSWorkspace.shared.activateFileViewerSelecting([file])
+                        onSuccess()
                         return
                     }
                     let url = AppSettings.shared.defaultSaveURL()
@@ -261,6 +266,7 @@ final class CaptureCoordinator {
                         )
                         captureURL = actualURL
                         RecentCapturesStore.record(url: actualURL)
+                        onSuccess()
                     } catch {
                         self.finishWithError(error)
                     }
@@ -270,24 +276,26 @@ final class CaptureCoordinator {
             onPin: { PinnedScreenshotManager.shared.pin(image: image) },
             onOCR: { FeatureCoordinator.shared.showOCR(with: image) },
             onAskAI: { self.showAI(for: image) },
-            onCopyMarkdown: developer ? {
+            onCopyMarkdown: developer ? { onSuccess in
                 ImageExportActions.perform {
                     do {
                         captureURL = try await DeveloperClipboard.copyMarkdownSnippet(for: image, existingURL: captureURL)
+                        onSuccess()
                     } catch {
                         self.finishWithError(error)
                     }
                 }
             } : nil,
-            onCopyPath: developer ? {
+            onCopyPath: developer ? { onSuccess in
                 ImageExportActions.perform {
                     do {
                         if let file = savedFileURL {
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(file.path, forType: .string)
+                            guard NSPasteboard.general.setString(file.path, forType: .string) else { return }
                         } else {
                             captureURL = try await DeveloperClipboard.copyFilePath(for: image, existingURL: captureURL)
                         }
+                        onSuccess()
                     } catch {
                         self.finishWithError(error)
                     }
