@@ -21,14 +21,14 @@ private struct QuickAccessPanelSizeKey: PreferenceKey {
 }
 
 struct QuickAccessActions {
-    var onCopy: () -> Void
-    var onSave: () -> Void
+    var onCopy: (@escaping () -> Void) -> Void
+    var onSave: (@escaping () -> Void) -> Void
     var onAnnotate: () -> Void
     var onPin: () -> Void
     var onOCR: () -> Void
     var onAskAI: (() -> Void)?
-    var onCopyMarkdown: (() -> Void)?
-    var onCopyPath: (() -> Void)?
+    var onCopyMarkdown: ((@escaping () -> Void) -> Void)?
+    var onCopyPath: ((@escaping () -> Void) -> Void)?
     var onClose: () -> Void
 }
 
@@ -490,9 +490,9 @@ struct QuickAccessStackView: View {
                 .zIndex(activeHover == entry.id ? Double(entries.count + (selectedToolbarStyle == .bubbles ? 3 : 1)) : Double(entries.count - index))
                 .allowsHitTesting(expanded || index == 0)
                 .animation(reduceMotion || !animatesAppearance ? nil :
-                    .spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.03), value: expanded)
+                    .easeOut(duration: 0.3).delay(Double(index) * 0.03), value: expanded)
                 .animation(reduceMotion || !animatesAppearance ? nil :
-                    .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
+                    .easeOut(duration: 0.2), value: activeHover)
             }
             if entries.count > 1 {
                 let top = frames.prefix(expanded ? entries.count : QuickAccessStackGeometry.maxCollapsedLayers)
@@ -502,9 +502,9 @@ struct QuickAccessStackView: View {
                     .offset(x: top.minX, y: top.minY - 32)
                     .zIndex(Double(entries.count + 2))
                     .animation(reduceMotion || !animatesAppearance ? nil :
-                        .spring(response: 0.42, dampingFraction: 0.82).delay(Double(entries.count - 1) * 0.03), value: expanded)
+                        .easeOut(duration: 0.3).delay(Double(entries.count - 1) * 0.03), value: expanded)
                     .animation(reduceMotion || !animatesAppearance ? nil :
-                        .spring(response: 0.42, dampingFraction: 0.82), value: activeHover)
+                        .easeOut(duration: 0.2), value: activeHover)
             }
         }
         .frame(width: canvasSize.width, height: canvasSize.height, alignment: .topLeading)
@@ -601,8 +601,8 @@ private struct QuickAccessCard: View {
 
     private var actions: [(symbol: String, label: String, action: () -> Void)] {
         [
-            ("doc.on.clipboard", OctoshotL10n.quickAccessCopy, wrapAlternate(entry.actions.onCopy)),
-            ("square.and.arrow.down", OctoshotL10n.quickAccessSave, wrapAlternate(entry.actions.onSave)),
+            ("doc.on.clipboard", OctoshotL10n.quickAccessCopy, wrapDismissAfterSuccess(entry.actions.onCopy)),
+            ("square.and.arrow.down", OctoshotL10n.quickAccessSave, wrapDismissAfterSuccess(entry.actions.onSave)),
             ("pencil.and.outline", OctoshotL10n.quickAccessAnnotate, wrapAlternate(entry.actions.onAnnotate)),
             ("pin", OctoshotL10n.quickAccessPin, wrapAlternate(entry.actions.onPin)),
             ("text.viewfinder", OctoshotL10n.ocrAction, wrapAlternate(entry.actions.onOCR)),
@@ -657,10 +657,10 @@ private struct QuickAccessCard: View {
                 Button(OctoshotL10n.quickAccessAskAI, action: wrapAlternate(action))
             }
             if let action = entry.actions.onCopyMarkdown {
-                Button(OctoshotL10n.quickAccessCopyMarkdown, action: wrapAlternate(action))
+                Button(OctoshotL10n.quickAccessCopyMarkdown, action: wrapDismissAfterSuccess(action))
             }
             if let action = entry.actions.onCopyPath {
-                Button(OctoshotL10n.quickAccessCopyPath, action: wrapAlternate(action))
+                Button(OctoshotL10n.quickAccessCopyPath, action: wrapDismissAfterSuccess(action))
             }
         }
     }
@@ -683,7 +683,7 @@ private struct QuickAccessCard: View {
             .position(x: toolbarFrame.midX, y: toolbarFrame.midY)
             .allowsHitTesting(isHovering)
             .accessibilityHidden(!isHovering)
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82), value: isHovering)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isHovering)
         } else {
             GeometryReader { proxy in
                 let cardFrame = proxy.frame(in: .named("quickAccessViewport"))
@@ -698,7 +698,7 @@ private struct QuickAccessCard: View {
                     .position(x: thumbSize.width / 2, y: thumbSize.height / 2)
                     .allowsHitTesting(isHovering)
                     .accessibilityHidden(!isHovering)
-                    .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.8), value: isHovering)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isHovering)
             }
         }
     }
@@ -722,17 +722,31 @@ private struct QuickAccessCard: View {
         }
     }
 
+    private func wrapDismissAfterSuccess(_ action: @escaping (@escaping () -> Void) -> Void) -> () -> Void {
+        {
+            onAlternateAction()
+            action(onClose)
+        }
+    }
+
     private func applySpeculativeResult() {
         guard case .ready(_, let result) = speculativeState.phase else { return }
         switch result {
         case .latex(let text), .tableMarkdown(let text), .codeText(let text):
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+            guard NSPasteboard.general.setString(text, forType: .string) else { return }
         case .redactedImage(let image):
-            ImageExportActions.copy(image)
+            ImageExportActions.perform {
+                try await ImageFormats.copyToPasteboardAsync(image)
+                onAlternateAction()
+                speculativeState.phase = .hidden
+                onClose()
+            }
+            return
         }
         onAlternateAction()
         speculativeState.phase = .hidden
+        onClose()
     }
 }
 
@@ -839,7 +853,7 @@ private struct QuickAccessThumbnailChrome<Content: View>: View {
                 perspective: 0.55
             )
             .scaleEffect(reduceMotion || !isHovering ? 1 : 1.025)
-            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.74), value: isHovering)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isHovering)
     }
 }
 

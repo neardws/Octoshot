@@ -190,6 +190,20 @@ final class QuickAccessV3LayoutTests: XCTestCase {
         XCTAssertEqual(QuickAccessLayout.springProgress(1), 1)
     }
 
+    func testSpringProgressIsMonotonicAndNeverOvershoots() {
+        var previous: CGFloat = 0
+        for step in 0...10_000 {
+            let time = CGFloat(step) / 10_000
+            let progress = QuickAccessLayout.springProgress(time)
+            XCTAssertGreaterThanOrEqual(progress, 0, "time: \(time)")
+            XCTAssertLessThanOrEqual(progress, 1, "time: \(time)")
+            XCTAssertGreaterThanOrEqual(progress, previous, "time: \(time)")
+            previous = progress
+        }
+        XCTAssertEqual(QuickAccessLayout.springProgress(-1), 0)
+        XCTAssertEqual(QuickAccessLayout.springProgress(2), 1)
+    }
+
     func testRingIsCircularCenteredAndHasSixEqualSlots() {
         for size in sizes + [CGSize(width: 240, height: 180), CGSize(width: 240, height: 1), CGSize(width: 1, height: 180)] {
             let rect = CGRect(origin: CGPoint(x: 44, y: 44), size: size)

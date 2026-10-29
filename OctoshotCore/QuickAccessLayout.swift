@@ -315,7 +315,7 @@ public enum QuickAccessLayout {
     public static func springProgress(_ time: CGFloat) -> CGFloat {
         if time <= 0 { return 0 }
         if time >= 1 { return 1 }
-        return 1 - exp(-8 * time) * (cos(10 * time) + 0.8 * sin(10 * time))
+        return 1 - pow(1 - time, 3)
     }
 }
 
