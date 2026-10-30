@@ -189,8 +189,7 @@ actor MCPStdioServer {
             return try await AgentProcessing.extractTable(image: image)
         case "annotate":
             guard let path = str("path"), let specValue = args["spec"] else { throw CaptureError.captureFailed("path and spec required") }
-            let specData = try JSONSerialization.data(withJSONObject: specValue.toJSONObject())
-            let spec = try JSONDecoder().decode(AgentAnnotationSpec.self, from: specData)
+            let spec = try decodeAgentAnnotationSpec(from: specValue)
             let image = try AgentCaptureEngine.loadImage(path: path)
             let annotated = try AnnotationRenderer.apply(spec: spec, to: image)
             let out = str("output").map { URL(fileURLWithPath: $0) }
